@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: pos-vendas-motoshow
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --config gunicorn.conf.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pos-vendas-motoshow-db
+          property: connectionString
+databases:
+  - name: pos-vendas-motoshow-db
+    region: oregon
+    plan: 0.1c-256mb
+    diskSizeGB: 1
+    databaseName: pos_vendas_motoshow_db
+    user: pos_vendas_motoshow_db_user
+    postgresMajorVersion: '17'
+    ipAllowList: []
+

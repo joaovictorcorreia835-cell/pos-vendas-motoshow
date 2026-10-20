@@ -1,9 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
 instance/
 backups/
 imports/
 tmp/
 .env
 .env.*
+!.env.example
 *.credentials
 *.db
-__pycache__/
+*.sqlite*
