@@ -1,0 +1,9 @@
+instance/
+backups/
+imports/
+tmp/
+.env
+.env.*
+*.credentials
+*.db
+__pycache__/
