@@ -21,6 +21,11 @@ class Usuario(db.Model):
     tentativas = db.Column(db.Integer, nullable=False, default=0)
     bloqueado_ate = db.Column(db.DateTime)
 
+    @property
+    def administrador(self):
+        # A conta inicial conserva a administração; cadastros seguintes são operadores.
+        return self.id == 1
+
 class Cliente(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(160), nullable=False)

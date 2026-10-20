@@ -1,6 +1,8 @@
 """Login obrigatório, credenciais com hash e bloqueio persistido no banco."""
 import os
 import secrets
+import re
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 from flask import request, session, redirect, url_for, render_template, jsonify, abort, g, flash
@@ -33,6 +35,34 @@ def configure_auth(app):
             if request.method!='GET':
                 abort(400,description='Faça login e recarregue o formulário.')
             return redirect(url_for('login',next=request.full_path))
+        if request.endpoint in ['cadastrar_usuario','backup','restaurar','importacao_inicial'] and not g.usuario.administrador:
+            abort(403)
+
+    @app.context_processor
+    def usuarios_context():
+        if request.endpoint=='configuracoes' and g.usuario and g.usuario.administrador:
+            return {'usuarios_cadastrados':db.session.scalars(db.select(Usuario).order_by(Usuario.login)).all()}
+        return {}
+
+    @app.post('/configuracoes/usuarios')
+    def cadastrar_usuario():
+        name=request.form.get('usuario','').strip().lower()
+        password=request.form.get('senha','')
+        if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{2,79}',name):
+            flash('Use um usuário de 3 a 80 caracteres: letras sem acento, números, ponto, hífen ou sublinhado.','danger')
+        elif not 12<=len(password)<=128:
+            flash('A senha deve ter entre 12 e 128 caracteres.','danger')
+        elif password!=request.form.get('confirmar',''):
+            flash('A confirmação da senha não confere.','danger')
+        else:
+            try:
+                db.session.add(Usuario(login=name,senha_hash=generate_password_hash(password)))
+                db.session.commit()
+                flash('Usuário cadastrado. Ele já pode entrar no sistema e alterar sua própria senha.','success')
+            except IntegrityError:
+                db.session.rollback()
+                flash('Este usuário já está cadastrado. Escolha outro nome.','danger')
+        return redirect(url_for('configuracoes')+'#usuarios')
 
     @app.after_request
     def security_headers(response):
