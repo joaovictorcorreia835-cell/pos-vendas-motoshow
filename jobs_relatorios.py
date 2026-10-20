@@ -115,7 +115,10 @@ def executar_pendente():
         if inflater.unconsumed_tail or not inflater.eof:raise ValueError('Lote inválido ou muito grande.')
         payload=json.loads(raw)
         digest=hashlib.sha256(raw).hexdigest()
-        if payload.get('kind')=='pedidos':
+        if payload.get('kind')=='mensal':
+            from jobs_mensais import aplicar_meses
+            result=aplicar_meses(payload,digest)
+        elif payload.get('kind')=='pedidos':
             from jobs_pedidos import aplicar_pedidos
             result=aplicar_pedidos(payload,digest)
         else:
