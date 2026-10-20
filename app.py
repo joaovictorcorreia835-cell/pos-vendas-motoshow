@@ -110,16 +110,22 @@ def create_app(database=None):
         return [len([p for p in valid if p.tipo!='Balcão']),sum(revenue(p) for p in valid),sum(revenue(p) for p in valid if p.ordem and p.tipo!='Balcão'),sum(revenue(p) for p in valid if p.tipo=='Balcão'),sum(i.valor_liquido for p in billed for i in p.itens if i.categoria=='Mão de obra'),len([p for p in valid if p.ordem and p.status!='Finalizada']),len([p for p in valid if p.garantia]),len([p for p in valid if p.seguro])]
     @app.get('/')
     def dashboard():
-        return render_template('dashboard.html',page='dashboard',default_period='mes')
+        args=dict(request.args); args.setdefault('periodo','mes')
+        result=dashboard_data(args)
+        if isinstance(result,tuple):
+            flash(result[0].get_json()['error'],'danger')
+            result=dashboard_data({'periodo':'mes'})
+        return render_template('dashboard.html',page='dashboard',default_period='mes',initial=result.get_json())
     @app.get('/api/dashboard')
-    def dashboard_data():
-        try: rows=records(); start,end=dates(request.args)
+    def dashboard_data(args=None):
+        args=request.args if args is None else args
+        try: rows=records(args); start,end=dates(args)
         except ValueError: return jsonify(error='Período inválido'),400
         if end<start or (end-start).days>366: return jsonify(error='Selecione um período de até 367 dias.'),400
-        previous=dict(request.args); previous['inicio']=(start-(end-start)-timedelta(days=1)).isoformat(); previous['fim']=(start-timedelta(days=1)).isoformat()
+        previous=dict(args); previous['inicio']=(start-(end-start)-timedelta(days=1)).isoformat(); previous['fim']=(start-timedelta(days=1)).isoformat()
         totals=metrics(rows); prev=metrics(records(previous)); valid=live(rows)
         chartstart=start if start!=end else end-timedelta(days=6)
-        chartargs=dict(request.args); chartargs.update(inicio=chartstart.isoformat(),fim=end.isoformat())
+        chartargs=dict(args); chartargs.update(inicio=chartstart.isoformat(),fim=end.isoformat())
         chartrows=live(records(chartargs)); days=[chartstart+timedelta(days=i) for i in range((end-chartstart).days+1)]
         series=[]
         for kind in ['os','balcao','mao']:
@@ -133,14 +139,14 @@ def create_app(database=None):
             series.append(values)
         from dashboard_finance import financials
         from faturamento import shift
-        finance=financials(start,end,request.args,rows)
+        finance=financials(start,end,args,rows)
         totals[1:5]=finance['sums']
         # Para consolidados, a compara??o financeira usa meses de calend?rio.
         if finance['monthly']:
             count=len(finance['months']); first=shift(start.year,start.month,-count)
             last=shift(start.year,start.month,-1); after=shift(*last,1)
             pstart=date(*first,1); pend=date(*after,1)-timedelta(days=1)
-            pargs=dict(request.args); pargs.update(inicio=pstart.isoformat(),fim=pend.isoformat())
+            pargs=dict(args); pargs.update(inicio=pstart.isoformat(),fim=pend.isoformat())
             previous_finance=financials(pstart,pend,pargs,records(pargs))
             prev[1:5]=previous_finance['sums']
             if not previous_finance['monthly'] and not any(previous_finance['sums']): prev[1:5]=[None]*4
@@ -152,16 +158,16 @@ def create_app(database=None):
         def row(p): return dict(prazo=prazo(p.data,bool(p.ordem and p.status not in ['Finalizada','Cancelada'])),id=p.id,hora=p.data.strftime('%H:%M'),data=p.data.strftime('%d/%m/%Y'),cliente=p.cliente.nome,moto=p.modelo,placa=p.placa,consultor=p.consultor.nome if p.consultor else '',tipo=p.tipo,status=p.status,os=p.ordem.numero if p.ordem else '',valor=brl(revenue(p)))
         osrows=[p for p in valid if p.ordem and p.status!='Finalizada']
         from pedidos import dashboard_data as pedidos_data
-        pedidos_summary=pedidos_data(request.args,datetime.combine(start,datetime.min.time()),datetime.combine(end+timedelta(days=1),datetime.min.time()),brl)
+        pedidos_summary=pedidos_data(args,datetime.combine(start,datetime.min.time()),datetime.combine(end+timedelta(days=1),datetime.min.time()),brl)
         pending_finance=dict(os_centavos=sum(p.total for p in osrows),pedidos_centavos=pedidos_summary['total_centavos'])
         pending_finance['total_centavos']=pending_finance['os_centavos']+pending_finance['pedidos_centavos']
         from indicadores import ticket_medio,ticket_pedidos_faturados
         ticket=ticket_medio(rows)
         from indicadores import resumo_prazos
         from pedidos import filtered as pedidos_filtered
-        backlog_args=dict(request.args);backlog_args.update(inicio='1900-01-01',fim=date.today().isoformat())
+        backlog_args=dict(args);backlog_args.update(inicio='1900-01-01',fim=date.today().isoformat())
         backlog_os=[p for p in records(backlog_args) if p.ordem and p.status not in ['Finalizada','Cancelada']]
-        backlog_pedidos=db.session.scalars(pedidos_filtered(request.args).where(Pedido.status=='Aberto')).all()
+        backlog_pedidos=db.session.scalars(pedidos_filtered(args).where(Pedido.status=='Aberto')).all()
         alertas=dict(os=resumo_prazos(backlog_os,'data'),pedidos=resumo_prazos(backlog_pedidos,'inserido_em'))
         return jsonify(ticket_pedidos_faturados=ticket_pedidos_faturados(rows),alertas_prazo=alertas,ticket_medio=ticket,faturamento_pendente=pending_finance,range=dict(inicio=start.isoformat(),fim=end.isoformat()),pedidos=pedidos_summary,totals=totals,previous=prev,days=[d.strftime('%m/%Y' if finance['monthly'] else '%d/%m') for d in days],series=series,financial_monthly=finance['monthly'],financial_note=('Faturamento da planilha mensal. O consolidado substitui as OS da mesma unidade e mês; não há duplicação. Passagens e status continuam vindo dos atendimentos.' if finance['monthly'] else 'Consolidado mensal disponível: selecione Este mês, Mês anterior ou um intervalo começando no dia 1, sem filtro de tipo ou status.' if finance['saved'] else ''),category_labels=CATEGORIAS+(['OS (Serviços)'] if finance['monthly'] else []),types=[sum((p.tipo==t or (t=='Manutenção' and p.tipo=='Troca de óleo')) for p in valid if p.tipo!='Balcão') for t in ['Revisão','Manutenção','Garantia','Seguro','Outros']],statuses=[sum(p.status==s or (s=='Em andamento' and p.status=='Aberta') for p in osrows) for s in ['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada']],categories=finance['categories'] if finance['monthly'] else finance['categories'][:6],passagens=[row(p) for p in valid if p.tipo!='Balcão'][:6],ordens=[row(p) for p in osrows][:6])
     @app.route('/lancamento',methods=['GET','POST'])
