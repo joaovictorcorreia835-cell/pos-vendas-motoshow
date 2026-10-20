@@ -5,6 +5,8 @@ from datetime import datetime, date, timedelta
 from decimal import Decimal, InvalidOperation
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session, abort
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
+from carregamento import atendimentos
 from models import *
 
 ROOT = Path(__file__).resolve().parent
@@ -94,7 +96,7 @@ def create_app(database=None):
     def records(args=None):
         args=request.args if args is None else args
         start,end=dates(args)
-        q=db.select(Passagem).where(Passagem.data>=datetime.combine(start,datetime.min.time()),Passagem.data<datetime.combine(end+timedelta(days=1),datetime.min.time()))
+        q=db.select(Passagem).options(*atendimentos()).where(Passagem.data>=datetime.combine(start,datetime.min.time()),Passagem.data<datetime.combine(end+timedelta(days=1),datetime.min.time()))
         for key,col in [('tipo',Passagem.tipo),('status',Passagem.status),('unidade',Passagem.unidade),('consultor',Passagem.consultor_id),('mecanico',Passagem.mecanico_id)]:
             if args.get(key):
                 value=args[key]
@@ -169,7 +171,10 @@ def create_app(database=None):
         backlog_os=[p for p in records(backlog_args) if p.ordem and p.status not in ['Finalizada','Cancelada']]
         backlog_pedidos=db.session.scalars(pedidos_filtered(args).where(Pedido.status=='Aberto')).all()
         alertas=dict(os=resumo_prazos(backlog_os,'data'),pedidos=resumo_prazos(backlog_pedidos,'inserido_em'))
-        return jsonify(ticket_pedidos_faturados=ticket_pedidos_faturados(rows),alertas_prazo=alertas,ticket_medio=ticket,faturamento_pendente=pending_finance,range=dict(inicio=start.isoformat(),fim=end.isoformat()),pedidos=pedidos_summary,totals=totals,previous=prev,days=[d.strftime('%m/%Y' if finance['monthly'] else '%d/%m') for d in days],series=series,financial_monthly=finance['monthly'],financial_note=('Faturamento da planilha mensal. O consolidado substitui as OS da mesma unidade e mês; não há duplicação. Passagens e status continuam vindo dos atendimentos.' if finance['monthly'] else 'Consolidado mensal disponível: selecione Este mês, Mês anterior ou um intervalo começando no dia 1, sem filtro de tipo ou status.' if finance['saved'] else ''),category_labels=CATEGORIAS+(['OS (Serviços)'] if finance['monthly'] else []),types=[sum((p.tipo==t or (t=='Manutenção' and p.tipo=='Troca de óleo')) for p in valid if p.tipo!='Balcão') for t in ['Revisão','Manutenção','Garantia','Seguro','Outros']],statuses=[sum(p.status==s or (s=='Em andamento' and p.status=='Aberta') for p in osrows) for s in ['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada']],categories=finance['categories'] if finance['monthly'] else finance['categories'][:6],passagens=[row(p) for p in valid if p.tipo!='Balcão'][:6],ordens=[row(p) for p in osrows][:6])
+        payload=dict(ticket_pedidos_faturados=ticket_pedidos_faturados(rows),alertas_prazo=alertas,ticket_medio=ticket,faturamento_pendente=pending_finance,range=dict(inicio=start.isoformat(),fim=end.isoformat()),pedidos=pedidos_summary,totals=totals,previous=prev,days=[d.strftime('%m/%Y' if finance['monthly'] else '%d/%m') for d in days],series=series,financial_monthly=finance['monthly'],financial_note=('Faturamento da planilha mensal. O consolidado substitui as OS da mesma unidade e mês; não há duplicação. Passagens e status continuam vindo dos atendimentos.' if finance['monthly'] else 'Consolidado mensal disponível: selecione Este mês, Mês anterior ou um intervalo começando no dia 1, sem filtro de tipo ou status.' if finance['saved'] else ''),category_labels=CATEGORIAS+(['OS (Serviços)'] if finance['monthly'] else []),types=[sum((p.tipo==t or (t=='Manutenção' and p.tipo=='Troca de óleo')) for p in valid if p.tipo!='Balcão') for t in ['Revisão','Manutenção','Garantia','Seguro','Outros']],statuses=[sum(p.status==s or (s=='Em andamento' and p.status=='Aberta') for p in osrows) for s in ['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada']],categories=finance['categories'] if finance['monthly'] else finance['categories'][:6],passagens=[row(p) for p in valid if p.tipo!='Balcão'][:6],ordens=[row(p) for p in osrows][:6])
+        from graficos import graficos_painel
+        payload['charts']=graficos_painel(payload)
+        return jsonify(payload)
     @app.route('/lancamento',methods=['GET','POST'])
     @app.route('/lancamento/<int:ident>',methods=['GET','POST'])
     def lancamento(ident=None):
@@ -245,7 +250,7 @@ def create_app(database=None):
             return redirect(url_for('clientes'))
         cs=db.session.scalars(db.select(Cliente).order_by(Cliente.nome)).all()
         selected=db.session.get(Cliente,request.args.get('id',type=int)) if request.args.get('id') else None
-        history=db.session.scalars(db.select(Passagem).where(Passagem.cliente_id==selected.id).order_by(Passagem.data.desc())).all() if selected else []
+        history=db.session.scalars(db.select(Passagem).options(*atendimentos()).where(Passagem.cliente_id==selected.id).order_by(Passagem.data.desc())).all() if selected else []
         return render_template('clientes.html',page='clientes',clientes=cs,selected=selected,history=history,total=sum(revenue(p) for p in history))
     @app.post('/clientes/<int:ident>/excluir')
     def excluir_cliente(ident):

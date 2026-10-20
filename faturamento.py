@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from sqlalchemy.exc import IntegrityError
+from carregamento import atendimentos
 from models import db, Configuracao, FaturamentoMensal, FaturamentoConsultor, Passagem
 
 bp = Blueprint('mensal', __name__)
@@ -52,7 +53,7 @@ def faturamento_consultores(ano,mes,unidade,record=None,fonte='movimentos'):
         for row in record.linhas if record else []: add(row.nome,row.os_centavos,row.balcao_centavos)
     else:
         start=datetime(ano,mes,1);y,m=shift(ano,mes,1);end=datetime(y,m,1)
-        rows=db.session.scalars(db.select(Passagem).where(Passagem.unidade==unidade,Passagem.data>=start,Passagem.data<end,Passagem.status=='Finalizada')).all()
+        rows=db.session.scalars(db.select(Passagem).options(*atendimentos()).where(Passagem.unidade==unidade,Passagem.data>=start,Passagem.data<end,Passagem.status=='Finalizada')).all()
         for p in rows:
             nome=p.consultor.nome if p.consultor else 'Não informado'
             if p.tipo=='Balcão':

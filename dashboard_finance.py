@@ -2,6 +2,7 @@
 from datetime import date
 from models import db, FaturamentoMensal, Consultor
 from faturamento import shift
+from sqlalchemy.orm import selectinload
 
 def financials(start, end, args, rows):
     # Um consolidado mensal não pode ser repartido em dias ou status fictícios.
@@ -9,7 +10,7 @@ def financials(start, end, args, rows):
     months=[]; key=(start.year,start.month)
     while key <= (end.year,end.month):
         months.append(key); key=shift(*key,1)
-    saved=db.session.scalars(db.select(FaturamentoMensal)).all()
+    saved=db.session.scalars(db.select(FaturamentoMensal).options(selectinload(FaturamentoMensal.linhas))).all()
     unit=args.get('unidade'); consultant=args.get('consultor','')
     name=None; code=None
     if consultant.startswith('mensal:'): code=consultant[7:]

@@ -1,27 +1,99 @@
-const currency=n=>(n/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
-const colors=['#009aff','#a532ed','#ff7218','#91a3b7','#6c8296'];
-if(typeof Chart!=='undefined'){Chart.defaults.color='#afc6d6';Chart.defaults.font.family="'Segoe UI',Arial,sans-serif";Chart.defaults.font.size=11;}
-const charts={};if(typeof Chart==='undefined'){const warning=document.getElementById('dashboard-error');warning.textContent='Os gráficos não carregaram. Os indicadores continuam disponíveis. Recarregue a página para tentar novamente.';warning.hidden=false;}
-function donut(id,labels,values,palette){const total=values.reduce((a,b)=>a+b,0);const data={labels:total?labels:['Sem registros'],datasets:[{data:total?values:[1],backgroundColor:total?palette:['#18313f'],borderWidth:0,hoverOffset:3}]};if(charts[id]){charts[id].data=data;charts[id].update();}else charts[id]=new Chart(document.getElementById(id),{type:'doughnut',data,options:{cutout:'62%',plugins:{legend:{display:false},tooltip:{enabled:!!total}},animation:{duration:350}}});document.getElementById(id+'-total').textContent=total;const legend=document.getElementById(id+'-legend');legend.replaceChildren();labels.forEach((label,i)=>{const row=document.createElement('div');row.className='legend-row';const dot=document.createElement('i');dot.className='dot';dot.style.background=palette[i];const name=document.createElement('span');name.textContent=label;const val=document.createElement('span');val.textContent=`${values[i]} (${total?(100*values[i]/total).toFixed(0):0}%)`;row.append(dot,name,val);legend.append(row);});}
-function cell(value){const td=document.createElement('td');td.textContent=value;return td;}
-function table(id,empty,rows,keys){const body=document.getElementById(id);body.replaceChildren();document.getElementById(empty).style.display=rows.length?'none':'flex';rows.forEach(r=>{const tr=document.createElement('tr');tr.className='prazo-row-'+(r.prazo?.nivel||'inativo');keys.forEach(k=>tr.append(k==='prazo'?deadlineCell(r.prazo):cell(k==='moto'?`${r.moto} ${r.placa}`:k==='entrada'?`${r.data} ${r.hora}`:r[k])));tr.addEventListener('dblclick',()=>location.href='/lancamento/'+r.id);body.append(tr);});}
-let pending;
-async function refresh(){const params=new URLSearchParams(new FormData(document.getElementById('filters')));if(pending)pending.abort();pending=new AbortController();try{const response=await fetch('/api/dashboard?'+params,{signal:pending.signal});const d=await response.json();if(response.status===401){location.href='/login';return;}if(!response.ok)throw Error(d.error||'Não foi possível atualizar');document.getElementById('dashboard-error').hidden=typeof Chart!=='undefined';d.totals.forEach((v,i)=>{document.getElementById('kpi-'+i).textContent=[1,2,3,4].includes(i)?currency(v):v;const prev=d.previous[i];const rate=prev?((v-prev)/prev*100):null;document.getElementById('comparison-'+i).textContent=prev===null?'Sem base anterior':rate===null?(v?'Novo no período':'—  0%'):`${rate>0?'↑':rate<0?'↓':'—'} ${rate.toFixed(0)}%`;});updateDeadlines(d.alertas_prazo,params);const billed=d.ticket_pedidos_faturados;document.getElementById('ticket-billed-orders-average').textContent=currency(billed.centavos);document.getElementById('ticket-billed-orders-base').textContent=currency(billed.total_centavos)+' ÷ '+billed.quantidade+' vendas faturadas';const ticket=d.ticket_medio;document.getElementById('ticket-labor-average').textContent=currency(ticket.mao_obra_centavos);document.getElementById('ticket-labor-base').textContent=currency(ticket.total_mao_obra_centavos);document.getElementById('ticket-average').textContent=currency(ticket.centavos);document.getElementById('ticket-base').textContent=currency(ticket.total_centavos);document.getElementById('ticket-count').textContent=ticket.quantidade+' OS';document.getElementById('ticket-excluded').textContent=ticket.trocas_oleo_excluidas+' trocas de óleo excluídas';const note=document.getElementById('financial-note');note.textContent=d.financial_note||'';note.hidden=!d.financial_note;document.getElementById('revenue-title').textContent=d.financial_monthly?'Faturamento por Mês':'Faturamento por Dia';if(typeof Chart!=='undefined'){const data={labels:d.days,datasets:['OS (Serviços)','Balcão (Peças)','Mão de obra'].map((label,i)=>({label,data:d.series[i],backgroundColor:['#00b78a','#ff7017','#a932ec'][i],borderRadius:2}))};if(charts.revenue){charts.revenue.data=data;charts.revenue.update();}else charts.revenue=new Chart(document.getElementById('revenue'),{type:'bar',data,options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:11,padding:18}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+currency(ctx.raw*100)}}},scales:{x:{grid:{color:'#173747'}},y:{beginAtZero:true,suggestedMax:d.series.flat().some(v=>v)?undefined:50000,grid:{color:'#214152'},ticks:{callback:v=>'R$ '+v.toLocaleString('pt-BR')}}}}});document.getElementById('chart-period').textContent=d.financial_monthly?'Consolidado mensal':d.days.length===7?'Últimos 7 dias':'Período selecionado';donut('types',['Revisão','Manutenção','Garantia','Seguro','Outros'],d.types,colors);donut('statuses',['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada'],d.statuses,['#00bd89','#009aff','#ffda39','#ff7823','#ff3d48']);}table('recent-passages','passages-empty',d.passagens,['id','hora','cliente','moto','tipo','consultor','status']);table('recent-orders','orders-empty',d.ordens,['os','entrada','cliente','moto','consultor','tipo','status','prazo','valor']);pendingFinance(d.faturamento_pendente,d.range);const pd=d.pedidos;document.getElementById('ticket-orders-average').textContent=currency(pd.ticket_medio_centavos);document.getElementById('ticket-orders-base').textContent=pd.valor+' ÷ '+pd.quantidade+' pedidos em aberto';document.getElementById('pending-summary').textContent=pd.quantidade+' pedidos • '+pd.valor;table('recent-pending','pending-empty',pd.registros,['numero','data','cliente','consultor','status','prazo','valor']);const pq=new URLSearchParams();if(d.range){pq.set('inicio',d.range.inicio);pq.set('fim',d.range.fim);}for(const key of ['unidade','consultor']){if(params.get(key))pq.set(key,params.get(key));}document.getElementById('pending-all').href='/pedidos?'+pq;const categories=document.getElementById('categories');categories.replaceChildren();const sum=d.categories.reduce((a,b)=>a+b,0);d.category_labels.forEach((c,i)=>{const pct=sum?d.categories[i]*100/sum:0;const row=document.createElement('div');row.className='category-row';const label=document.createElement('span');label.textContent=c;const bar=document.createElement('div');bar.className='category-bar';const fill=document.createElement('i');fill.style.background=['#ff7218','#a532ed','#009aff','#ff3d48','#ffda39','#91a3b7','#00b78a'][i];fill.style.width=pct+'%';bar.append(fill);const amount=document.createElement('span');amount.className='amount-label';amount.textContent=currency(d.categories[i]);const percent=document.createElement('span');percent.className='percent';percent.textContent=pct.toFixed(0)+'%';row.append(label,bar,amount,percent);categories.append(row);});}catch(e){if(e.name!=='AbortError'){const warning=document.getElementById('dashboard-error');warning.textContent='Falha ao atualizar o painel. Os valores exibidos foram carregados na abertura da página. Clique em Atualizar para tentar novamente.';warning.hidden=false;toast(e.message);}}}
-document.getElementById('filters').addEventListener('submit',e=>{e.preventDefault();refresh();});document.getElementById('filters').addEventListener('change',()=>{if(period.value!=='custom'||[...document.querySelectorAll('#custom-dates input')].every(i=>i.value))refresh();});refresh();
-
-window.addEventListener('focus',refresh);window.addEventListener('pageshow',e=>{if(e.persisted)refresh();});setInterval(()=>{if(!document.hidden)refresh();},30000);
-
-function pendingFinance(data,range){
- const values=[data.os_centavos,data.pedidos_centavos];
- document.getElementById('pending-finance-total').textContent=currency(data.total_centavos);
- document.getElementById('pending-finance-os').textContent=currency(values[0]);
- document.getElementById('pending-finance-orders').textContent=currency(values[1]);
- let label='Período selecionado';
- if(range){const begin=range.inicio.split('-'),end=range.fim.split('-');label=begin[0]===end[0]&&begin[1]===end[1]?begin[1]+'/'+begin[0]:begin[2]+'/'+begin[1]+'/'+begin[0]+' a '+end[2]+'/'+end[1]+'/'+end[0];}
- const chartData={labels:[label],datasets:[{label:'OS em aberto',data:[values[0]/100],backgroundColor:'#00b78a',borderRadius:3,maxBarThickness:125},{label:'Pedidos em aberto',data:[values[1]/100],backgroundColor:'#ff7017',borderRadius:3,maxBarThickness:125}]};
- if(charts.pendingFinance){charts.pendingFinance.data=chartData;charts.pendingFinance.update();}
- else if(typeof Chart!=='undefined')charts.pendingFinance=new Chart(document.getElementById('pending-finance-chart'),{type:'bar',data:chartData,options:{maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{boxWidth:13,padding:20}},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+currency(Math.round(ctx.raw*100))}}},scales:{x:{grid:{color:'#173747'}},y:{beginAtZero:true,grid:{color:'#214152'},ticks:{callback:v=>'R$ '+v.toLocaleString('pt-BR')}}}}});
-}
-
-function deadlineCell(info){const td=document.createElement('td');if(!info||info.dias===null){td.textContent='—';return td;}const badge=document.createElement('span');badge.className='prazo-badge '+info.nivel;badge.textContent=info.rotulo+' • '+info.dias+' dias';td.append(badge);return td;}
-function updateDeadlines(data,params){for(const group of ['os','pedidos'])for(const level of ['atencao','atrasado']){document.getElementById('deadline-'+group+'-'+level).textContent=data[group][level];const query=new URLSearchParams();query.set('prazo',level);if(group==='os'){query.set('periodo','custom');query.set('inicio','1900-01-01');const now=new Date();query.set('fim',now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0'));for(const k of ['tipo','status'])if(params.get(k))query.set(k,params.get(k));}for(const k of ['unidade','consultor'])if(params.get(k))query.set(k,params.get(k));document.getElementById('deadline-link-'+group+'-'+level).href=(group==='os'?'/ordens?':'/pedidos?')+query;}}
+(() => {
+ 'use strict';
+ const form=document.getElementById('filters');
+ const currency=n=>(n/100).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+ const el=id=>document.getElementById(id);
+ const put=(id,value)=>{el(id).textContent=value;};
+ let pending=null,lastUpdated=Date.now();
+ function deadline(info){
+  const td=document.createElement('td');
+  if(!info||info.dias===null){td.textContent='—';return td;}
+  const badge=document.createElement('span');badge.className='prazo-badge '+info.nivel;
+  badge.textContent=info.rotulo+' • '+info.dias+' dias';td.append(badge);return td;
+ }
+ function table(id,empty,rows,keys){
+  const body=el(id);body.replaceChildren();el(empty).style.display=rows.length?'none':'flex';
+  for(const row of rows){
+   const tr=document.createElement('tr');tr.className='prazo-row-'+(row.prazo?.nivel||'inativo');
+   for(const key of keys){
+    if(key==='prazo'){tr.append(deadline(row.prazo));continue;}
+    const td=document.createElement('td');
+    td.textContent=key==='moto'?`${row.moto} ${row.placa}`:key==='entrada'?`${row.data} ${row.hora}`:row[key];
+    tr.append(td);
+   }
+   if(row.id)tr.addEventListener('dblclick',()=>{location.href='/lancamento/'+row.id;});
+   body.append(tr);
+  }
+ }
+ function legend(id,labels,values,colors){
+  const total=values.reduce((a,b)=>a+b,0);put(id+'-total',total);const target=el(id+'-legend');target.replaceChildren();
+  labels.forEach((label,i)=>{
+   const row=document.createElement('div');row.className='legend-row';
+   const dot=document.createElement('i');dot.className='dot';dot.style.background=colors[i];
+   const name=document.createElement('span');name.textContent=label;
+   const count=document.createElement('span');count.textContent=`${values[i]} (${total?(values[i]*100/total).toFixed(0):0}%)`;
+   row.append(dot,name,count);target.append(row);
+  });
+ }
+ function render(d,params){
+  d.totals.forEach((v,i)=>{
+   put('kpi-'+i,[1,2,3,4].includes(i)?currency(v):v);
+   const previous=d.previous[i],rate=previous?(v-previous)*100/previous:null;
+   put('comparison-'+i,previous===null?'Sem base anterior':rate===null?(v?'Novo no período':'— 0%'):`${rate>0?'↑':rate<0?'↓':'—'} ${rate.toFixed(0)}%`);
+  });
+  const ticket=d.ticket_medio,billed=d.ticket_pedidos_faturados,pd=d.pedidos,pf=d.faturamento_pendente;
+  for(const [id,value] of Object.entries({
+   'ticket-average':ticket.centavos,'ticket-base':ticket.total_centavos,
+   'ticket-labor-average':ticket.mao_obra_centavos,'ticket-labor-base':ticket.total_mao_obra_centavos,
+   'ticket-orders-average':pd.ticket_medio_centavos,'ticket-billed-orders-average':billed.centavos,
+   'pending-finance-total':pf.total_centavos,'pending-finance-os':pf.os_centavos,'pending-finance-orders':pf.pedidos_centavos
+  }))put(id,currency(value));
+  put('ticket-count',ticket.quantidade+' OS');put('ticket-excluded',ticket.trocas_oleo_excluidas+' trocas de óleo excluídas');
+  put('ticket-orders-base',pd.valor+' ÷ '+pd.quantidade+' pedidos em aberto');
+  put('ticket-billed-orders-base',currency(billed.total_centavos)+' ÷ '+billed.quantidade+' vendas faturadas');
+  put('financial-note',d.financial_note||'');el('financial-note').hidden=!d.financial_note;
+  put('pending-summary',pd.quantidade+' pedidos • '+pd.valor);
+  table('recent-passages','passages-empty',d.passagens,['id','hora','cliente','moto','tipo','consultor','status']);
+  table('recent-orders','orders-empty',d.ordens,['os','entrada','cliente','moto','consultor','tipo','status','prazo','valor']);
+  table('recent-pending','pending-empty',pd.registros,['numero','data','cliente','consultor','status','prazo','valor']);
+  legend('types',['Revisão','Manutenção','Garantia','Seguro','Outros'],d.types,['#009aff','#a532ed','#ff7218','#91a3b7','#6c8296']);
+  legend('statuses',['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada'],d.statuses,['#00bd89','#009aff','#ffda39','#ff7823','#ff3d48']);
+  for(const group of ['os','pedidos'])for(const level of ['atencao','atrasado']){
+   put('deadline-'+group+'-'+level,d.alertas_prazo[group][level]);const q=new URLSearchParams({prazo:level});
+   if(group==='os'){q.set('periodo','custom');q.set('inicio','1900-01-01');q.set('fim',d.range.fim);for(const k of ['tipo','status'])if(params.get(k))q.set(k,params.get(k));}
+   for(const k of ['unidade','consultor'])if(params.get(k))q.set(k,params.get(k));
+   el('deadline-link-'+group+'-'+level).href=(group==='os'?'/ordens?':'/pedidos?')+q;
+  }
+  const query=new URLSearchParams({inicio:d.range.inicio,fim:d.range.fim});
+  for(const k of ['unidade','consultor'])if(params.get(k))query.set(k,params.get(k));el('pending-all').href='/pedidos?'+query;
+  const categories=el('categories');categories.replaceChildren();const total=d.categories.reduce((a,b)=>a+b,0);
+  d.category_labels.forEach((label,i)=>{
+   const row=document.createElement('div');row.className='category-row';const name=document.createElement('span');name.textContent=label;
+   const bar=document.createElement('div');bar.className='category-bar';const fill=document.createElement('i');
+   const percent=total?100*d.categories[i]/total:0;fill.style.width=percent+'%';fill.style.background=['#ff7218','#a532ed','#009aff','#ff3d48','#ffda39','#91a3b7','#00b78a'][i];bar.append(fill);
+   const amount=document.createElement('span');amount.className='amount-label';amount.textContent=currency(d.categories[i]);const share=document.createElement('span');share.className='percent';share.textContent=percent.toFixed(0)+'%';row.append(name,bar,amount,share);categories.append(row);
+  });
+  // SVGs gerados e escapados pelo próprio servidor, sem biblioteca de gráficos.
+  for(const [id,svg] of Object.entries(d.charts))el(id).innerHTML=svg;
+  put('revenue-title',d.financial_monthly?'Faturamento por Mês':'Faturamento por Dia');
+  put('chart-period',d.financial_monthly?'Consolidado mensal':'Período selecionado');
+ }
+ async function refresh(automatic=false){
+  if(automatic&&pending)return;
+  if(pending)pending.abort();const controller=new AbortController();pending=controller;
+  const params=new URLSearchParams(new FormData(form));form.setAttribute('aria-busy','true');
+  try{
+   const response=await fetch('/api/dashboard?'+params,{signal:controller.signal});
+   if(response.status===401){location.href='/login';return;}
+   if(!response.ok)throw Error('Não foi possível atualizar o painel.');
+   const data=await response.json();render(data,params);el('dashboard-error').hidden=true;lastUpdated=Date.now();
+  }catch(error){
+   if(error.name!=='AbortError'){put('dashboard-error','Não foi possível atualizar. Os dados exibidos são os da última leitura. Tente novamente em Atualizar.');el('dashboard-error').hidden=false;}
+  }finally{if(pending===controller){pending=null;form.removeAttribute('aria-busy');}}
+ }
+ form.addEventListener('submit',e=>{e.preventDefault();refresh();});
+ form.addEventListener('change',()=>{if(el('periodo').value!=='custom'||[...document.querySelectorAll('#custom-dates input')].every(i=>i.value))refresh();});
+ // A primeira leitura já veio no HTML. Evita refazer todas as consultas ao abrir a página.
+ setInterval(()=>{if(!document.hidden&&Date.now()-lastUpdated>=60000)refresh(true);},60000);
+ window.addEventListener('focus',()=>{if(Date.now()-lastUpdated>=60000)refresh(true);});
+})();
