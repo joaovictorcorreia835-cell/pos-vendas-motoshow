@@ -115,7 +115,11 @@ def executar_pendente():
         if inflater.unconsumed_tail or not inflater.eof:raise ValueError('Lote inválido ou muito grande.')
         payload=json.loads(raw)
         digest=hashlib.sha256(raw).hexdigest()
-        result=aplicar_lote(payload,digest)
+        if payload.get('kind')=='pedidos':
+            from jobs_pedidos import aplicar_pedidos
+            result=aplicar_pedidos(payload,digest)
+        else:
+            result=aplicar_lote(payload,digest)
         print('RELATORIOS_JOB_OK '+json.dumps(dict(lote=digest,**result)),flush=True)
     except Exception as error:
         print('RELATORIOS_JOB_ERRO '+type(error).__name__,flush=True)

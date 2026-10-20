@@ -43,7 +43,7 @@ def read_html(path):
  if not rows or len({r['numero'] for r in rows})!=len(rows):raise ValueError('Planilha vazia ou com números repetidos.')
  return rows,dict(quantidade=len(rows),total_centavos=sum(r['liquido_centavos'] for r in rows),arquivo=path.name,sha256=hashlib.sha256(raw).hexdigest())
 
-def import_rows(rows,summary,unidade,backup_dir,atualizar_existentes=False):
+def import_rows(rows,summary,unidade,backup_dir,atualizar_existentes=False,commit=True,criar_backup=True):
  existing={p.numero:p for p in db.session.scalars(db.select(Pedido).where(Pedido.unidade==unidade))};new=[];skipped=0;changed=[]
  for row in rows:
   old=existing.get(row['numero'])
@@ -55,7 +55,8 @@ def import_rows(rows,summary,unidade,backup_dir,atualizar_existentes=False):
   else:new.append(row)
  if not new and not changed:return dict(importados=0,atualizados=0,ignorados=skipped,backup=None)
  folder=Path(backup_dir);folder.mkdir(parents=True,exist_ok=True);backup=folder/datetime.now().strftime('antes_importacao_pedidos_%Y-%m-%d_%H-%M-%S-%f.db')
- with closing(sqlite3.connect(db.engine.url.database)) as src,closing(sqlite3.connect(backup)) as dst:src.backup(dst)
+ if criar_backup:
+  with closing(sqlite3.connect(db.engine.url.database)) as src,closing(sqlite3.connect(backup)) as dst:src.backup(dst)
  try:
   audit=[]
   for old,row in changed:
@@ -68,7 +69,8 @@ def import_rows(rows,summary,unidade,backup_dir,atualizar_existentes=False):
   for row in new:
    values=dict(row);values['inserido_em']=datetime.fromisoformat(row['inserido_em']);values['validade']=datetime.fromisoformat(row['validade']).date() if row['validade'] else None
    db.session.add(Pedido(**values,unidade=unidade,arquivo=summary['arquivo'],sha256=summary['sha256']))
-  db.session.commit()
+  if commit:db.session.commit()
+  else:db.session.flush()
  except Exception:db.session.rollback();raise
  return dict(importados=len(new),atualizados=len(changed),ignorados=skipped,alteracoes=audit,backup=str(backup))
 
