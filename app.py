@@ -38,6 +38,17 @@ def create_app(database=None):
         if not db.session.get(Configuracao,1): db.session.add(Configuracao(id=1,unidade='Parauapebas')); db.session.commit()
     from auth import configure_auth
     configure_auth(app)
+    with app.app_context():
+        from jobs_relatorios import executar_pendente
+        executar_pendente()
+    @app.get('/atualizacoes/backup/<digest>')
+    def backup_relatorios(digest):
+        from jobs_relatorios import historico
+        from sqlalchemy import inspect
+        if not re.fullmatch(r'[a-f0-9]{64}',digest) or not inspect(db.engine).has_table(historico.name):abort(404)
+        data=db.session.execute(db.select(historico.c.backup).where(historico.c.sha256==digest)).scalar()
+        if data is None:abort(404)
+        return send_file(io.BytesIO(data),as_attachment=True,download_name='antes_atualizacao_'+digest[:12]+'.db')
     @app.context_processor
     def server_context():
         return {'config_online':db.engine.dialect.name!='sqlite'}

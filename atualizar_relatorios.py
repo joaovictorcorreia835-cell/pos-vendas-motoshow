@@ -17,7 +17,7 @@ def load(paths):
 
 def business(row):return {k:v for k,v in row.items() if k!='pagina'}
 
-def synchronize(documents,unit,folder,apply=False,backup_dir='backups'):
+def synchronize(documents,unit,folder,apply=False,backup_dir='backups',commit=True,criar_backup=True):
  folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
  existing={o.numero:o for o in db.session.scalars(db.select(OrdemServico))}
  sales_existing={v.nota:v for v in db.session.scalars(db.select(VendaBalcao).where(VendaBalcao.unidade==unit,VendaBalcao.natureza=='Venda'))}
@@ -40,7 +40,8 @@ def synchronize(documents,unit,folder,apply=False,backup_dir='backups'):
  for rows,s in documents:(folder/(Path(s['arquivo']).stem+'.json')).write_text(json.dumps(dict(resumo=s,linhas=rows),ensure_ascii=False,indent=2),encoding='utf-8')
  if not apply:return plan
  backup=Path(backup_dir)/datetime.now().strftime('antes_atualizar_relatorios_%Y-%m-%d_%H-%M-%S-%f.db');backup.parent.mkdir(exist_ok=True,parents=True)
- with closing(sqlite3.connect(db.engine.url.database)) as src,closing(sqlite3.connect(backup)) as dst:src.backup(dst)
+ if criar_backup:
+  with closing(sqlite3.connect(db.engine.url.database)) as src,closing(sqlite3.connect(backup)) as dst:src.backup(dst)
  consultants={c.nome.casefold():c for c in db.session.scalars(db.select(Consultor))}
  def consultant(name):
   key=name.casefold()
@@ -82,7 +83,8 @@ def synchronize(documents,unit,folder,apply=False,backup_dir='backups'):
    if p.total!=row['liquido']:p.itens=[ItemOrdem(categoria='Peças (Balcão)',centavos=row['liquido'])]
    p.data=datetime.combine(datetime.fromisoformat(row['data']).date(),p.data.time());p.consultor=consultant(row['consultor'])
    v.numero=row['numero'];v.codigo_interno=row['codigo_interno'];v.arquivo=summary['arquivo'];v.sha256=summary['sha256'];v.pagina=row['pagina'];v.dados=row
-  db.session.commit()
+  if commit:db.session.commit()
+  else:db.session.flush()
  except Exception:db.session.rollback();raise
  result=dict(plan,backup=str(backup));(folder/'resultado.json').write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8');return result
 

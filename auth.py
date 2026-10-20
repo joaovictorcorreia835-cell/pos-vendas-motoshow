@@ -35,7 +35,7 @@ def configure_auth(app):
             if request.method!='GET':
                 abort(400,description='Faça login e recarregue o formulário.')
             return redirect(url_for('login',next=request.full_path))
-        if request.endpoint in ['cadastrar_usuario','backup','restaurar','importacao_inicial'] and not g.usuario.administrador:
+        if request.endpoint in ['cadastrar_usuario','backup','restaurar','importacao_inicial','backup_relatorios'] and not g.usuario.administrador:
             abort(403)
 
     @app.context_processor
