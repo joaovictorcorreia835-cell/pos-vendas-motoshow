@@ -114,7 +114,7 @@ class FaturamentoConsultor(db.Model):
     codigo = db.Column(db.String(30), nullable=False)
     nome = db.Column(db.String(160), nullable=False)
     os_centavos = db.Column(db.Integer, db.CheckConstraint('os_centavos >= 0'), nullable=False, default=0)
-    balcao_centavos = db.Column(db.Integer, db.CheckConstraint('balcao_centavos >= 0'), nullable=False, default=0)
+    balcao_centavos = db.Column(db.Integer, nullable=False, default=0)
     mao_centavos = db.Column(db.Integer, db.CheckConstraint('mao_centavos >= 0'), nullable=False, default=0)
     pendentes_centavos = db.Column(db.Integer, db.CheckConstraint('pendentes_centavos >= 0'), nullable=False, default=0)
     __table_args__ = (db.UniqueConstraint('mensal_id', 'codigo'),)

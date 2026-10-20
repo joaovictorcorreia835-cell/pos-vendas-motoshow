@@ -35,6 +35,8 @@ def create_app(database=None):
     app.register_blueprint(pedidos_bp)
     with app.app_context():
         db.create_all()
+        from schema_mensal import atualizar_schema_mensal
+        atualizar_schema_mensal()
         if not db.session.get(Configuracao,1): db.session.add(Configuracao(id=1,unidade='Parauapebas')); db.session.commit()
     from auth import configure_auth
     configure_auth(app)

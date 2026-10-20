@@ -33,7 +33,7 @@ def validar(payload):
             if row['codigo'] in codes:
                 raise ValueError('Código duplicado.')
             codes.add(row['codigo'])
-            if any(type(row[c]) is not int or not 0 <= row[c] <= 2_147_483_647 for c in CAMPOS):
+            if any(type(row[c]) is not int or not (-2_147_483_647 if c == 'balcao_centavos' else 0) <= row[c] <= 2_147_483_647 for c in CAMPOS):
                 raise ValueError('Valor inválido.')
         expected = {c: sum(r[c] for r in rows) for c in CAMPOS}
         expected['total'] = sum(expected[c] for c in CAMPOS[:3])
@@ -61,6 +61,27 @@ def aplicar_meses(payload, digest):
             before = {t.name: [tuple(r) for r in db.session.execute(select(t).order_by(t.c.id))] for t in db.metadata.sorted_tables}
             backup = sqlite_snapshot(db.engine).getvalue()
             added = 0
+            corrected = 0
+            for correction in payload.get('code_corrections', []):
+                record = db.session.scalar(select(FaturamentoMensal).where(FaturamentoMensal.ano == correction['ano'], FaturamentoMensal.mes == correction['mes'], FaturamentoMensal.unidade == unit))
+                if record is None:
+                    raise ValueError('Mês da correção não encontrado.')
+                row = next((r for r in record.linhas if r.codigo == correction['from']), None)
+                target = next((r for r in record.linhas if r.codigo == correction['to']), None)
+                if row is None and target is not None and target.nome == correction['nome']:
+                    continue
+                if row is None or target is not None or row.nome != correction['nome']:
+                    raise ValueError('Correção de código divergente.')
+                row.codigo = correction['to']
+                # Única alteração autorizada em registros anteriores: o código desta linha.
+                name = FaturamentoConsultor.__tablename__
+                index = list(FaturamentoConsultor.__table__.columns.keys()).index('codigo')
+                before[name] = [tuple(correction['to'] if i == index else v for i, v in enumerate(old)) if old[0] == row.id else old for old in before[name]]
+                record.versao += 1
+                record.atualizado_em = datetime.now()
+                db.session.flush()
+                before[FaturamentoMensal.__tablename__] = [tuple(r) for r in db.session.execute(select(FaturamentoMensal.__table__).order_by(FaturamentoMensal.id))]
+                corrected += 1
             for month in months:
                 record = db.session.scalar(select(FaturamentoMensal).where(FaturamentoMensal.ano == month['ano'], FaturamentoMensal.mes == month['mes'], FaturamentoMensal.unidade == unit))
                 expected = sorted((r['codigo'], r['nome'], *(r[c] for c in CAMPOS)) for r in month['linhas'])
@@ -82,7 +103,7 @@ def aplicar_meses(payload, digest):
                 if table.name not in ('faturamento_mensal', 'faturamento_consultor'):
                     if db.session.scalar(select(db.func.count()).select_from(table)) != len(old):
                         raise ValueError('Outros registros alterados.')
-            result = dict(tipo='mensal', meses_adicionados=added, meses=[dict(ano=m['ano'], mes=m['mes'], **m['expected']) for m in months], backup_sha256=hashlib.sha256(backup).hexdigest())
+            result = dict(tipo='mensal', meses_adicionados=added, codigos_corrigidos=corrected, meses=[dict(ano=m['ano'], mes=m['mes'], **m['expected']) for m in months], backup_sha256=hashlib.sha256(backup).hexdigest())
             db.session.execute(historico.insert().values(sha256=digest, backup=backup, resultado=result, criado_em=datetime.now()))
             db.session.commit()
             return dict(result, reaplicado=True)

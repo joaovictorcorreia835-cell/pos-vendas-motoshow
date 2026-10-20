@@ -11,13 +11,13 @@ bp = Blueprint('mensal', __name__)
 MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 CAMPOS = ['os_centavos','balcao_centavos','mao_centavos','pendentes_centavos']
 
-def money(text):
+def money(text, allow_negative=False):
     text = str(text or '').strip().replace('R$', '').replace(' ', '')
     if not text or text == '-': return 0
     if ',' in text: text = text.replace('.', '').replace(',', '.')
     try: number = Decimal(text)
     except InvalidOperation: raise ValueError('Informe valores monetários válidos, como 1.250,00.')
-    if not number.is_finite() or number < 0 or number > Decimal('999999999.99'):
+    if not number.is_finite() or (number < 0 and not allow_negative) or abs(number) > Decimal('999999999.99'):
         raise ValueError('Os valores devem estar entre zero e R$ 999.999.999,99.')
     if number != number.quantize(Decimal('.01')): raise ValueError('Use no máximo duas casas decimais.')
     return int(number * 100)
@@ -89,7 +89,7 @@ def painel():
             for index, row in enumerate(submitted, 1):
                 if not isinstance(row, dict): raise ValueError('Linha inválida.')
                 codigo = str(row.get('codigo', '')).strip().upper(); nome = str(row.get('nome', '')).strip()
-                amounts = {key: money(row.get(key, '')) for key in CAMPOS}
+                amounts = {key: money(row.get(key, ''), allow_negative=key=='balcao_centavos') for key in CAMPOS}
                 if not codigo and not nome and not any(amounts.values()): continue
                 if not codigo or not nome: raise ValueError(f'Linha {index}: informe código e consultor.')
                 if len(codigo) > 30 or len(nome) > 160: raise ValueError(f'Linha {index}: código ou nome muito longo.')
