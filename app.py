@@ -43,6 +43,26 @@ def create_app(database=None):
     def healthz():
         db.session.execute(db.text('SELECT 1'))
         return jsonify(status='ok')
+    @app.post('/importacao-inicial')
+    def importacao_inicial():
+        if os.environ.get('ALLOW_INITIAL_IMPORT')!='true': abort(404)
+        uploaded=request.files.get('arquivo')
+        if not uploaded: return jsonify(error='Selecione o backup inicial.'),400
+        from sqlalchemy import create_engine
+        from deployment import copy_database
+        import tempfile
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'origem.db'
+            uploaded.save(path)
+            source=create_engine('sqlite:///file:'+path.as_posix()+'?mode=ro&uri=true')
+            try:
+                db.session.remove()
+                copy_database(source,db.engine,allow_config=True,exclude_auth=True)
+            except Exception:
+                db.session.rollback()
+                return jsonify(error='Importação recusada: verifique se o backup é compatível e o destino está vazio.'),409
+            finally: source.dispose()
+        return jsonify(status='ok',mensagem='Dados importados e valores conferidos.')
     @app.template_filter('brl')
     def brl(n): return 'R$ '+f'{(n or 0)/100:,.2f}'.replace(',','X').replace('.',',').replace('X','.')
     @app.template_filter('cpf_format')

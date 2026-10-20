@@ -20,6 +20,8 @@ def copy_database(source, destination, *, allow_config=False, exclude_auth=False
     with source.connect() as src, destination.begin() as dst:
         if source.dialect.name=='postgresql':
             src=src.execution_options(isolation_level='REPEATABLE READ')
+        if destination.dialect.name=='postgresql':
+            dst.execute(text('LOCK TABLE '+', '.join('"'+t.name+'"' for t in tables)+' IN EXCLUSIVE MODE'))
         for table in tables:
             count=dst.scalar(select(func.count()).select_from(table))
             if count and not (allow_config and table.name=='configuracao'):

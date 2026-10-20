@@ -16,6 +16,16 @@ Não envie bancos, relatórios, senhas ou arquivos `.env` ao GitHub.
 
 ## Migração inicial dos dados
 
+Preferencialmente, habilite temporariamente `ALLOW_INITIAL_IMPORT=true`,
+configure o administrador pelo ambiente do Render e execute
+`python enviar_dados_online.py https://SEU-SISTEMA.onrender.com --backup backups/COPIA.db`.
+O envio usa HTTPS, login e CSRF; o destino deve estar vazio, sem sobrescrever
+o usuário online. Após conferir os dados, remova `ALLOW_INITIAL_IMPORT`.
+Assim, o PostgreSQL pode permanecer sem acesso externo.
+
+Alternativa por conexão direta:
+
+
 1. Faça backup de `instance/oficina.db` e suspenda lançamentos locais durante a cópia.
 2. No Render, permita temporariamente o IP do computador na conexão externa do
    banco. Configure a URL externa com TLS na variável `MIGRATION_DATABASE_URL`.
