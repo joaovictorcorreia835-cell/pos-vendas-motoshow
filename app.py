@@ -185,6 +185,19 @@ def create_app(database=None):
         backlog_pedidos=db.session.scalars(pedidos_filtered(args).where(Pedido.status=='Aberto')).all()
         alertas=dict(os=resumo_prazos(backlog_os,'data'),pedidos=resumo_prazos(backlog_pedidos,'inserido_em'))
         payload=dict(ticket_pedidos_faturados=ticket_pedidos_faturados(rows),alertas_prazo=alertas,ticket_medio=ticket,faturamento_pendente=pending_finance,range=dict(inicio=start.isoformat(),fim=end.isoformat()),pedidos=pedidos_summary,totals=totals,previous=prev,days=[d.strftime('%m/%Y' if finance['monthly'] else '%d/%m') for d in days],series=series,financial_monthly=finance['monthly'],financial_note=('Faturamento da planilha mensal. O consolidado substitui as OS da mesma unidade e mês; não há duplicação. Passagens e status continuam vindo dos atendimentos.' if finance['monthly'] else 'Consolidado mensal disponível: selecione Este mês, Mês anterior ou um intervalo começando no dia 1, sem filtro de tipo ou status.' if finance['saved'] else ''),category_labels=CATEGORIAS+(['OS (Serviços)'] if finance['monthly'] else []),types=[sum((p.tipo==t or (t=='Manutenção' and p.tipo=='Troca de óleo')) for p in valid if p.tipo!='Balcão') for t in ['Revisão','Manutenção','Garantia','Seguro','Outros']],statuses=[sum(p.status==s or (s=='Em andamento' and p.status=='Aberta') for p in osrows) for s in ['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada']],categories=finance['categories'] if finance['monthly'] else finance['categories'][:6],passagens=[row(p) for p in valid if p.tipo!='Balcão'][:6],ordens=[row(p) for p in osrows][:6])
+        deadline_links={}
+        for group in ['os','pedidos']:
+            deadline_links[group]={}
+            for level in ['atencao','atrasado']:
+                query={k:args[k] for k in ['unidade','consultor'] if args.get(k)}
+                query['prazo']=level
+                if group=='os':
+                    query.update(periodo='custom',inicio='1900-01-01',fim=date.today().isoformat())
+                    query.update({k:args[k] for k in ['tipo','status'] if args.get(k)})
+                    deadline_links[group][level]=url_for('listagem',page='ordens',**query)
+                else:
+                    deadline_links[group][level]=url_for('pedidos.listagem',**query)
+        payload['deadline_links']=deadline_links
         from graficos import graficos_painel
         payload['charts']=graficos_painel(payload)
         return jsonify(payload)

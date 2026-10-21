@@ -59,10 +59,8 @@
   legend('types',['Revisão','Manutenção','Garantia','Seguro','Outros'],d.types,['#009aff','#a532ed','#ff7218','#91a3b7','#6c8296']);
   legend('statuses',['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada'],d.statuses,['#00bd89','#009aff','#ffda39','#ff7823','#ff3d48']);
   for(const group of ['os','pedidos'])for(const level of ['atencao','atrasado']){
-   put('deadline-'+group+'-'+level,d.alertas_prazo[group][level]);const q=new URLSearchParams({prazo:level});
-   if(group==='os'){q.set('periodo','custom');q.set('inicio','1900-01-01');q.set('fim',d.range.fim);for(const k of ['tipo','status'])if(params.get(k))q.set(k,params.get(k));}
-   for(const k of ['unidade','consultor'])if(params.get(k))q.set(k,params.get(k));
-   el('deadline-link-'+group+'-'+level).href=(group==='os'?'/ordens?':'/pedidos?')+q;
+   put('deadline-'+group+'-'+level,d.alertas_prazo[group][level]);
+   el('deadline-link-'+group+'-'+level).href=d.deadline_links[group][level];
   }
   const query=new URLSearchParams({inicio:d.range.inicio,fim:d.range.fim});
   for(const k of ['unidade','consultor'])if(params.get(k))query.set(k,params.get(k));el('pending-all').href='/pedidos?'+query;
