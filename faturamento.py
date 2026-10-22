@@ -11,6 +11,17 @@ bp = Blueprint('mensal', __name__)
 MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 CAMPOS = ['os_centavos','balcao_centavos','mao_centavos','pendentes_centavos']
 
+def funcao_linha(row):
+    from indicadores import normal
+    get = row.get if isinstance(row, dict) else lambda k, default=None: getattr(row,k,default)
+    explicit=get('funcao')
+    if explicit in ['consultor','mecanico']: return explicit
+    name=normal(get('nome',''))
+    if get('codigo') in ['22509','22737','33478','64684','71294'] or name in ['jefferson','jefferon','heriky','leandro','hugo','pedro henrique']:
+        return 'mecanico'
+    if get('mao_centavos',0) and not get('os_centavos',0) and not get('balcao_centavos',0): return 'mecanico'
+    return 'consultor'
+
 def money(text, allow_negative=False):
     text = str(text or '').strip().replace('R$', '').replace(' ', '')
     if not text or text == '-': return 0
@@ -50,7 +61,8 @@ def faturamento_consultores(ano,mes,unidade,record=None,fonte='movimentos'):
         for field,value in [('os_centavos',os_value),('balcao_centavos',balcao)]: row[field]+=value
         row['total']+=os_value+balcao
     if fonte=='planilha':
-        for row in record.linhas if record else []: add(row.nome,row.os_centavos,row.balcao_centavos)
+        for row in record.linhas if record else []:
+            if funcao_linha(row)=='consultor': add(row.nome,row.os_centavos,row.balcao_centavos)
     else:
         start=datetime(ano,mes,1);y,m=shift(ano,mes,1);end=datetime(y,m,1)
         rows=db.session.scalars(db.select(Passagem).options(*atendimentos()).where(Passagem.unidade==unidade,Passagem.data>=start,Passagem.data<end,Passagem.status=='Finalizada')).all()
@@ -94,7 +106,9 @@ def painel():
                 if not codigo or not nome: raise ValueError(f'Linha {index}: informe código e consultor.')
                 if len(codigo) > 30 or len(nome) > 160: raise ValueError(f'Linha {index}: código ou nome muito longo.')
                 if codigo in codes: raise ValueError(f'Código {codigo} repetido neste mês.')
-                codes.add(codigo); clean.append(dict(codigo=codigo, nome=nome, **amounts))
+                funcao=row.get('funcao') or funcao_linha(dict(codigo=codigo,nome=nome,**amounts))
+                if funcao not in ['consultor','mecanico']: raise ValueError('Função inválida.')
+                codes.add(codigo); clean.append(dict(codigo=codigo, nome=nome, funcao=funcao, **amounts))
             version = int(request.form.get('versao', '0'))
             if record:
                 updated = db.session.execute(db.update(FaturamentoMensal).where(FaturamentoMensal.id==record.id, FaturamentoMensal.versao==version).values(versao=version+1, atualizado_em=datetime.now()))
@@ -125,15 +139,15 @@ def painel():
         y, m = shift(ano, mes, offset); value = totals(by_month.get((y, m))); prev = totals(by_month.get(shift(y, m, -1)))
         history.append(dict(ano=y, mes=m, label=f'{MESES[m-1][:3]}/{y}', values=value, change=change(value['total'] if value else None, prev['total'] if prev else None)))
     if submitted is not None:
-        initial = [{key: str(row.get(key, '')) for key in ['codigo','nome']+CAMPOS} for row in submitted]
+        initial = [{key: str(row.get(key, '')) for key in ['codigo','nome','funcao']+CAMPOS} for row in submitted]
     else:
-        initial = [dict(codigo=r.codigo, nome=r.nome, **{k: f'{getattr(r,k)/100:.2f}' for k in CAMPOS}) for r in record.linhas] if record else []
+        initial = [dict(codigo=r.codigo, nome=r.nome, funcao=funcao_linha(r), **{k: f'{getattr(r,k)/100:.2f}' for k in CAMPOS}) for r in record.linhas] if record else []
     previous_consultants = {r.codigo:r for r in by_month[previous_key].linhas} if previous_key in by_month else {}
     consultants = []
     current_consultants = {r.codigo:r for r in record.linhas} if record else {}
     for code in sorted(set(previous_consultants) | set(current_consultants)):
         current = current_consultants.get(code); old = previous_consultants.get(code)
-        consultants.append(dict(codigo=code, nome=(current or old).nome, current=current.total if current else 0, previous=old.total if old else 0, change=change(current.total if current else 0, old.total if old else 0) if record and previous is not None else change(None,None)))
+        consultants.append(dict(codigo=code, nome=(current or old).nome, funcao=funcao_linha(current or old), current=current.total if current else 0, previous=old.total if old else 0, change=change(current.total if current else 0, old.total if old else 0) if record and previous is not None else change(None,None)))
     units = sorted(set([unidade, db.session.get(Configuracao,1).unidade]+[r.unidade for r in db.session.scalars(db.select(FaturamentoMensal)).all()]))
     fonte_consultores=request.args.get('fonte_consultores','movimentos')
     if fonte_consultores not in ['movimentos','planilha']: fonte_consultores='movimentos'
