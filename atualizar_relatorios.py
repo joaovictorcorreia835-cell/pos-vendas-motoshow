@@ -11,7 +11,7 @@ def load(paths):
  documents=[]
  for path,reader in zip(paths,[read_os,read_os,read_sales]):
   rows,summary=reader(path);documents.append((rows,summary))
- if documents[0][1]['situacao']!='Faturada' or documents[1][1]['situacao']!='Aberta':raise ValueError('Forneça faturadas, abertas e balcão, nessa ordem.')
+ if documents[0][1]['situacao'] not in ['Faturada','Fechada'] or documents[1][1]['situacao']!='Aberta':raise ValueError('Forneça faturadas ou fechadas, abertas e balcão, nessa ordem.')
  if {r['os'] for r in documents[0][0]} & {r['os'] for r in documents[1][0]}:raise ValueError('A mesma OS aparece aberta e faturada; confira os arquivos.')
  return documents
 

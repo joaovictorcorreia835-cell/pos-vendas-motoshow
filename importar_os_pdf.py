@@ -24,7 +24,7 @@ def read_pdf(path):
     with pymupdf.open(path) as doc:
         for page_num, page in enumerate(doc, 1):
             text = page.get_text(sort=True)
-            status_match=re.search(r'Situação da O\.S\.:\s*(Faturada|Aberta)\b',text)
+            status_match=re.search(r'Situação da O\.S\.:\s*(Faturada|Aberta|Fechada)\b',text)
             if 'RELATÓRIO DE ORDEM DE SERVIÇO SINTÉTICO' not in text or not status_match:
                 raise ValueError(f'Página {page_num}: formato/situação de OS não reconhecido.')
             page_status=status_match[1]
@@ -47,7 +47,7 @@ def read_pdf(path):
                 number=[w[4] for w in line if 52<=w[0]<80 and w[4].isdigit()]
                 dates=[w[4] for w in line if DATE.fullmatch(w[4])]
                 if not number: continue
-                if len(dates) not in [1,2] or (document_status=='Faturada' and len(dates)!=2):
+                if len(dates) not in [1,2] or (document_status in ['Faturada','Fechada'] and len(dates)!=2):
                     raise ValueError(f'OS {number[0]}: datas não reconhecidas.')
                 if len(number)!=1 or not current_type: raise ValueError(f'OS ambígua na página {page_num}.')
                 def column(left,right): return ' '.join(w[4] for w in line if left<=w[0]<right).strip()
@@ -64,7 +64,7 @@ def read_pdf(path):
                 if not vehicle: raise ValueError(f'OS {number[0]}: moto não identificada.')
                 vehicle_id,model=vehicle.split(' - ',1)
                 row=dict(os=number[0],cliente=column(82,280),consultor=column(280,405),entrada=datetime.strptime(dates[0],'%d/%m/%Y').date().isoformat(),saida=datetime.strptime(dates[1],'%d/%m/%Y').date().isoformat() if len(dates)==2 else None,tipo_original=current_type,codigo_moto=vehicle_id,modelo=model,pecas=amounts[0],servicos=amounts[1],total_coluna_pdf=amounts[2],total=amounts[0]+amounts[1],pagina=page_num,mecanico=None)
-                if document_status=='Aberta': row['situacao']='Aberta'
+                if document_status in ['Aberta','Fechada']: row['situacao']=document_status
                 if not row['cliente'] or not row['consultor']: raise ValueError(f'OS {number[0]}: cliente/consultor ausente.')
                 rows.append(row)
     if footer is None: raise ValueError('Total final não identificado; importação bloqueada.')

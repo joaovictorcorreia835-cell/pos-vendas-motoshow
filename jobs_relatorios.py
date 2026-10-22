@@ -26,8 +26,11 @@ def validar(payload):
     docs=payload['documents'];unit=payload['unit']
     if not isinstance(unit,str) or not unit.strip() or len(unit)>100 or len(docs)!=3:
         raise ValueError('Unidade ou documentos inválidos.')
-    if [doc[1]['situacao'] for doc in docs[:2]]!=['Faturada','Aberta']:
+    situations=[doc[1]['situacao'] for doc in docs[:2]]
+    if situations not in [['Faturada','Aberta'],['Fechada','Aberta']]:
         raise ValueError('Situações de OS inválidas.')
+    if situations[0]=='Fechada' and payload.get('finalizar_fechadas') is not True:
+        raise ValueError('Registro de OS fechadas como finalizadas não confirmado.')
     keys=[]
     for rows,summary in docs[:2]:
         if len(rows)!=summary['count'] or not rows:raise ValueError('Contagem de OS inválida.')
@@ -84,7 +87,7 @@ def aplicar_lote(payload,digest):
             if {o.numero for o in final_os}!=allowed:raise ValueError('Conciliação de OS divergente.')
             for rows,summary in docs[:2]:
                 expected={r['os']:r for r in rows}
-                status='Finalizada' if summary['situacao']=='Faturada' else 'Aberta'
+                status='Aberta' if summary['situacao']=='Aberta' else 'Finalizada'
                 for order in final_os:
                     if order.numero in expected:
                         row=expected[order.numero];p=order.passagem
@@ -95,7 +98,7 @@ def aplicar_lote(payload,digest):
             if manual_before!=[tuple(row) for row in db.session.execute(select(FaturamentoConsultor.__table__).order_by(FaturamentoConsultor.id))]:raise ValueError('Faturamento manual alterado.')
             if months_before!=[tuple(row) for row in db.session.execute(select(FaturamentoMensal.__table__).order_by(FaturamentoMensal.id))]:raise ValueError('Meses manuais alterados.')
             if orders_before!=[tuple(row) for row in db.session.execute(select(Pedido.__table__).order_by(Pedido.id))]:raise ValueError('Pedidos alterados.')
-            result=dict(os_faturadas=docs[0][1]['count'],os_abertas=docs[1][1]['count'],os_novas=len(plan['os_novas']),os_excluidas=len(removed_os),os_finalizadas=len(plan['os_finalizadas']),vendas=len(sales),vendas_novas=len(plan['vendas_novas']),vendas_excluidas=len(removed_sales),devolucoes_ignoradas=plan['devolucoes_ignoradas'],faturadas_centavos=docs[0][1]['total'],abertas_centavos=docs[1][1]['total'],balcao_centavos=docs[2][1]['vendas'],backup_sha256=hashlib.sha256(backup).hexdigest())
+            result=dict(situacao_relatorio=docs[0][1]['situacao'],os_finalizadas_relatorio=docs[0][1]['count'],os_faturadas=docs[0][1]['count'] if docs[0][1]['situacao']=='Faturada' else 0,os_abertas=docs[1][1]['count'],os_novas=len(plan['os_novas']),os_excluidas=len(removed_os),os_finalizadas=len(plan['os_finalizadas']),vendas=len(sales),vendas_novas=len(plan['vendas_novas']),vendas_excluidas=len(removed_sales),devolucoes_ignoradas=plan['devolucoes_ignoradas'],faturadas_centavos=docs[0][1]['total'],abertas_centavos=docs[1][1]['total'],balcao_centavos=docs[2][1]['vendas'],backup_sha256=hashlib.sha256(backup).hexdigest())
             db.session.execute(historico.insert().values(sha256=digest,backup=backup,resultado=result,criado_em=datetime.now()))
             db.session.commit()
             return dict(result,reaplicado=True)
