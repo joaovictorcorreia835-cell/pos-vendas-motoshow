@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import timedelta
 from werkzeug.datastructures import FileStorage
 import test_app as fixtures
-from patio import MotoPatio, RelatorioPatio, ler_relatorio, estoque_atual
+from patio import MotoPatio, RelatorioPatio, LocalizacaoMoto, ler_relatorio, estoque_atual
 from models import db
 
 
@@ -60,6 +60,21 @@ class PatioTest(unittest.TestCase):
             self.assertEqual(self.c.get('/api/dashboard?unidade=Outra').get_json()['patio_atrasadas']['quantidade'], 1)
             self.assertIn('id="patio-overdue-count">3</strong>', self.c.get('/').text)
 
+    def test_physical_location_requires_confirmation_and_survives_import(self):
+        text = 'Chassi;Modelo;Situação\nVIN1;CG 160;Disponível para venda\nVIN2;Biz;Disponível para venda\n'
+        self.upload(text)
+        self.assertEqual(self.c.post('/patio/localizacao', data={'chassi': 'VIN1', 'localizacao': 'Em trânsito'}).status_code, 400)
+        for vin, loc in [('VIN1', 'Dentro da oficina'), ('VIN2', 'Em trânsito')]:
+            self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': vin, 'localizacao': loc}).status_code, 302)
+        self.assertIn('<strong>CG 160</strong>', self.c.get('/patio?localizacao=Dentro+da+oficina').text)
+        self.assertNotIn('<strong>Biz</strong>', self.c.get('/patio?localizacao=Dentro+da+oficina').text)
+        self.assertIn('<strong>Biz</strong>', self.c.get('/patio?localizacao=Em+tr%C3%A2nsito').text)
+        self.upload(text)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(LocalizacaoMoto, 'VIN1').localizacao, 'Dentro da oficina')
+            self.assertEqual(db.session.get(LocalizacaoMoto, 'VIN2').localizacao, 'Em trânsito')
+        self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': 'INEXISTENTE', 'localizacao': 'Em trânsito'}).status_code, 400)
+
 
 PDF_DIR = Path.home() / 'Downloads'
 PDF_NAMES = ['NEG_CUSTO_ATUAL.PDF', 'REPORT_MOTOSHOW_POSICAOMOTOS.PDF']
@@ -104,6 +119,11 @@ class PatioPDFTest(unittest.TestCase):
             self.assertEqual(sum(m.parcial for m in rows), 7)
             self.assertEqual(sum(m.situacao == 'Disponível para venda' for m in rows), 200)
             self.assertEqual(sum(m.situacao == 'Aguardando aprovação' for m in rows), 3)
+            self.assertTrue(all(m.localizacao == 'A confirmar' for m in rows))
+            self.assertEqual(sum(len(r.get('transito', [])) for r in reports), 129)
+            self.assertFalse(any(m.localizacao == 'Em trânsito' for m in rows))
+        self.assertIn('129 título(s)', self.c.get('/patio?visao=transito').text)
+        self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': '9C6RG5020R007565', 'localizacao': 'Dentro da oficina'}).status_code, 400)
         for group, expected in [('venda', '200 de 210'), ('aprovacao', '3 de 210'), ('motoshow', '7 de 210'), ('novas', '203 de 210')]:
             self.assertIn(expected, self.c.get('/patio?grupo=' + group).text)
         from patio_pdf import parse_pdf

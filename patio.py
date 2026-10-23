@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from openpyxl import load_workbook
 from models import db
 
@@ -38,6 +38,12 @@ class RelatorioPatio(db.Model):
     emitido_em = db.Column(db.DateTime, nullable=False)
     importado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     dados = db.Column(db.Text, nullable=False)
+
+
+class LocalizacaoMoto(db.Model):
+    chassi = db.Column(db.String(80), primary_key=True)
+    localizacao = db.Column(db.String(30), nullable=False)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
 
 def importar_pdfs(uploads):
@@ -82,10 +88,13 @@ def estoque_atual():
             row.update(arquivo=source.arquivo, atualizado_em=source.importado_em, emitido_em=source.emitido_em, parcial=False, titulo='', secao='Posição de veículos em oferta')
             entries[row['chassi']] = row
     pending = []
+    transito = []
     for (kind, unit), source in snapshots.items():
         if kind != 'posicao':
             continue
         for record in json.loads(source.dados)['rows']:
+            if record['secao'] == 'MOTOS EM TRANSITO A PAGAR':
+                transito.append(dict(record, unidade=unit, arquivo=source.arquivo, emitido_em=source.emitido_em))
             if 'MOTOSHOW' not in record['titular'].upper() or 'FATURADAS' not in record['secao']:
                 continue
             # Os chassis cortados no PDF financeiro não identificam uma moto.
@@ -102,7 +111,34 @@ def estoque_atual():
                 ano='', dias=None, compra_centavos=None, custo_centavos=None, oferta_centavos=None,
                 fornecedor='', titulo=record['titulo'], secao=record['secao'], codigo='', negociacao=''))
     result = [SimpleNamespace(**row) for row in list(entries.values()) + pending]
+    locations = {m.chassi: m.localizacao for m in db.session.scalars(db.select(LocalizacaoMoto))}
+    for moto in result:
+        moto.localizacao = locations.get(moto.chassi, 'A confirmar') if not moto.parcial else 'A confirmar'
+        moto.possivel_transito = any(moto.unidade == t['unidade'] and moto.chassi.startswith(t['chassi']) for t in transito) if not moto.parcial else False
+    for report in reports:
+        if report['fonte'] == 'posicao':
+            report['transito'] = [t for t in transito if t['arquivo'] == report['arquivo']]
     return sorted(result, key=lambda m: (m.modelo, m.chassi)), reports
+
+
+@bp.post('/patio/localizacao')
+def atualizar_localizacao():
+    chassi = request.form.get('chassi', '').strip().upper()
+    location = request.form.get('localizacao', '')
+    if location not in ('Dentro da oficina', 'Em trânsito', 'A confirmar'):
+        abort(400)
+    rows, _ = estoque_atual()
+    if not any(m.chassi == chassi and not m.parcial for m in rows):
+        abort(400, description='Confirme a localização usando um chassi completo do estoque.')
+    row = db.session.get(LocalizacaoMoto, chassi)
+    if row is None:
+        row = LocalizacaoMoto(chassi=chassi)
+        db.session.add(row)
+    row.localizacao = location
+    row.atualizado_em = datetime.utcnow()
+    db.session.commit()
+    flash('Localização da moto atualizada.', 'success')
+    return redirect(url_for('patio.listagem', **{k: request.form[k] for k in ('q', 'grupo', 'unidade', 'situacao', 'localizacao') if request.form.get(k) and k != 'localizacao'}))
 
 
 def normalizar(value):
@@ -205,6 +241,7 @@ def listagem():
             flash(str(exc) if isinstance(exc, ValueError) else 'Não foi possível importar. Confira o formato do relatório.', 'danger')
         return redirect(url_for('patio.listagem'))
     all_rows, reports = estoque_atual()
+    transito = [t for report in reports for t in report.get('transito', [])]
     q = normalizar(request.args.get('q', ''))
     def matches(m):
         grupo = request.args.get('grupo', '')
@@ -218,7 +255,12 @@ def listagem():
         return ((not q or q in normalizar(' '.join([m.modelo, m.chassi, m.placa, m.cor])))
                 and (not request.args.get('situacao') or m.situacao == request.args['situacao'])
                 and (not request.args.get('unidade') or m.unidade == request.args['unidade'])
+                and (not request.args.get('localizacao') or m.localizacao == request.args['localizacao'])
                 and (not grupo or grupos.get(grupo, False)))
     rows = [m for m in all_rows if matches(m)]
     counts = dict(novas=sum(normalizar(m.condicao) == 'nova' and not m.parcial for m in all_rows), venda=sum(normalizar(m.situacao) == 'disponivel para venda' for m in all_rows), aprovacao=sum(normalizar(m.situacao) == 'aguardando aprovacao' for m in all_rows), motoshow=sum('motoshow' in normalizar(m.faturado_para) for m in all_rows))
-    return render_template('patio.html', page='patio', rows=rows, total=len(all_rows), counts=counts, reports=reports, situacoes=sorted({m.situacao for m in all_rows}), patio_unidades=sorted({m.unidade for m in all_rows if m.unidade}), ultima=max((m.atualizado_em for m in all_rows), default=None))
+    unit = request.args.get('unidade', '')
+    physical = [m for m in all_rows if not m.parcial and (not unit or m.unidade == unit)]
+    counts.update(dentro=sum(m.localizacao == 'Dentro da oficina' for m in physical), transito=sum(m.localizacao == 'Em trânsito' for m in physical), confirmar=sum(m.localizacao == 'A confirmar' for m in physical))
+    transito = [t for t in transito if (not unit or t['unidade'] == unit) and (not q or q in normalizar(t['chassi'] + ' ' + t['titulo']))]
+    return render_template('patio.html', page='patio', rows=rows, total=len(all_rows), counts=counts, reports=reports, transito=transito, situacoes=sorted({m.situacao for m in all_rows}), patio_unidades=sorted({m.unidade for m in all_rows if m.unidade}), ultima=max((m.atualizado_em for m in all_rows), default=None))
