@@ -47,6 +47,19 @@ class PatioTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ler_relatorio(FileStorage(stream=io.BytesIO(b'Modelo;Cor\nCG;Azul'), filename='patio.csv'))
 
+    def test_dashboard_overdue_boundary_unit_and_period(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        rows = [SimpleNamespace(dias=d, unidade='Parauapebas') for d in (45, 46, 90, None)]
+        rows.append(SimpleNamespace(dias=60, unidade='Outra'))
+        with patch('patio.estoque_atual', return_value=(rows, [])):
+            data = self.c.get('/api/dashboard?inicio=2020-01-01&fim=2020-01-01&unidade=Parauapebas').get_json()
+            self.assertEqual(data['patio_atrasadas']['quantidade'], 2)
+            self.assertIn('grupo=atrasadas', data['patio_atrasadas']['url'])
+            self.assertIn('unidade=Parauapebas', data['patio_atrasadas']['url'])
+            self.assertEqual(self.c.get('/api/dashboard?unidade=Outra').get_json()['patio_atrasadas']['quantidade'], 1)
+            self.assertIn('id="patio-overdue-count">3</strong>', self.c.get('/').text)
+
 
 PDF_DIR = Path.home() / 'Downloads'
 PDF_NAMES = ['NEG_CUSTO_ATUAL.PDF', 'REPORT_MOTOSHOW_POSICAOMOTOS.PDF']
@@ -93,6 +106,10 @@ class PatioPDFTest(unittest.TestCase):
             self.assertEqual(sum(m.situacao == 'Aguardando aprovação' for m in rows), 3)
         for group, expected in [('venda', '200 de 210'), ('aprovacao', '3 de 210'), ('motoshow', '7 de 210'), ('novas', '203 de 210')]:
             self.assertIn(expected, self.c.get('/patio?grupo=' + group).text)
+        from patio_pdf import parse_pdf
+        expected = sum(m['dias'] > 45 for m in parse_pdf((PDF_DIR / PDF_NAMES[0]).read_bytes())['rows'])
+        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'], expected)
+        self.assertIn(f'{expected} de 210', self.c.get('/patio?grupo=atrasadas').text)
         self.upload()
         with self.app.app_context():
             self.assertEqual(db.session.query(RelatorioPatio).count(), 2)

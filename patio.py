@@ -109,6 +109,22 @@ def normalizar(value):
     return ''.join(c for c in unicodedata.normalize('NFKD', str(value or '').strip().lower()) if not unicodedata.combining(c))
 
 
+def atrasada(moto):
+    return moto.dias is not None and moto.dias > 45
+
+
+def resumo_atrasadas(unidade=''):
+    rows, reports = estoque_atual()
+    quantidade = sum(atrasada(m) for m in rows if not unidade or m.unidade == unidade)
+    query = dict(grupo='atrasadas')
+    if unidade:
+        query['unidade'] = unidade
+    datas = [r['emitido_em'] for r in reports if r['fonte'] == 'oferta']
+    nota = ('Dias de estoque informados no relatório de ' + max(datas).strftime('%d/%m/%Y')
+            if datas else 'Importe o relatório de veículos em oferta para atualizar a quantidade.')
+    return dict(quantidade=quantidade, url=url_for('patio.listagem', **query), nota=nota)
+
+
 def ler_relatorio(upload):
     extension = Path(upload.filename or '').suffix.lower()
     if extension == '.xlsx':
@@ -196,6 +212,7 @@ def listagem():
             'novas': not m.parcial and normalizar(m.condicao) in ('nova', 'novas', '0 km', '0km'),
             'venda': normalizar(m.situacao) in ('disponivel para venda', 'disponiveis para venda'),
             'aprovacao': normalizar(m.situacao) == 'aguardando aprovacao',
+            'atrasadas': atrasada(m),
             'motoshow': 'motoshow' in normalizar(m.faturado_para),
         }
         return ((not q or q in normalizar(' '.join([m.modelo, m.chassi, m.placa, m.cor])))

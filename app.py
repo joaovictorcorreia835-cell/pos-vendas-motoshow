@@ -202,6 +202,8 @@ def create_app(database=None):
                 else:
                     deadline_links[group][level]=url_for('pedidos.listagem',**query)
         payload['deadline_links']=deadline_links
+        from patio import resumo_atrasadas
+        payload['patio_atrasadas']=resumo_atrasadas(args.get('unidade',''))
         from graficos import graficos_painel
         payload['charts']=graficos_painel(payload)
         return jsonify(payload)
