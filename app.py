@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent
 TIPOS = ['Troca de óleo','Revisão','Manutenção','Garantia','Seguro','Balcão','Outros']
 STATUS = ['Aberta','Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada','Finalizada','Cancelada']
 CATEGORIAS = ['Peças (Balcão)','Mão de obra','Óleos e lubrificantes','Acessórios','Pneus','Outros']
-MENUS = [('dashboard','⌂','Visão Geral'),('ordens','▤','Ordens de Serviço'),('passagens','♧','Passagens'),('faturamento','▥','Faturamento'),('pedidos','▤','Pedidos em Aberto'),('pecas','◇','Peças (Balcão)'),('garantia','✚','Garantia'),('seguro','⬟','Seguro'),('clientes','♙','Clientes'),('relatorios','▧','Relatórios'),('configuracoes','⚙','Configurações')]
+MENUS = [('patio','◇','Motos no Pátio'),('dashboard','⌂','Visão Geral'),('ordens','▤','Ordens de Serviço'),('passagens','♧','Passagens'),('faturamento','▥','Faturamento'),('pedidos','▤','Pedidos em Aberto'),('pecas','◇','Peças (Balcão)'),('garantia','✚','Garantia'),('seguro','⬟','Seguro'),('clientes','♙','Clientes'),('relatorios','▧','Relatórios'),('configuracoes','⚙','Configurações')]
 def create_app(database=None):
     app=Flask(__name__)
     Path(app.instance_path).mkdir(exist_ok=True)
@@ -29,6 +29,8 @@ def create_app(database=None):
         from werkzeug.middleware.proxy_fix import ProxyFix
         app.wsgi_app=ProxyFix(app.wsgi_app,x_proto=1)
     db.init_app(app)
+    from patio import bp as patio_bp
+    app.register_blueprint(patio_bp)
     from faturamento import bp as faturamento_bp
     app.register_blueprint(faturamento_bp)
     from pedidos import bp as pedidos_bp
@@ -43,6 +45,8 @@ def create_app(database=None):
     with app.app_context():
         from jobs_relatorios import executar_pendente
         executar_pendente()
+        from jobs_patio import executar_pendente as importar_patio_pendente
+        importar_patio_pendente()
     @app.get('/atualizacoes/backup/<digest>')
     def backup_relatorios(digest):
         from jobs_relatorios import historico
