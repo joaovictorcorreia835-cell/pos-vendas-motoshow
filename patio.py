@@ -146,7 +146,7 @@ def normalizar(value):
 
 
 def atrasada(moto):
-    return moto.dias is not None and moto.dias > 45
+    return moto.dias is not None and moto.dias > 45 and getattr(moto, 'localizacao', '') != 'Em trânsito'
 
 
 def resumo_atrasadas(unidade=''):

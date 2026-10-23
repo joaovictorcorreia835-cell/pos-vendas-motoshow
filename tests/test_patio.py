@@ -130,6 +130,11 @@ class PatioPDFTest(unittest.TestCase):
         expected = sum(m['dias'] > 45 for m in parse_pdf((PDF_DIR / PDF_NAMES[0]).read_bytes())['rows'])
         self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'], expected)
         self.assertIn(f'{expected} de 210', self.c.get('/patio?grupo=atrasadas').text)
+        oldest = next(m['chassi'] for m in parse_pdf((PDF_DIR / PDF_NAMES[0]).read_bytes())['rows'] if m['dias'] > 45)
+        self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': oldest, 'localizacao': 'Em trânsito'})
+        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'], expected - 1)
+        self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': oldest, 'localizacao': 'Dentro da oficina'})
+        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'], expected)
         self.upload()
         with self.app.app_context():
             self.assertEqual(db.session.query(RelatorioPatio).count(), 2)
