@@ -41,6 +41,8 @@ def create_app(database=None):
         from schema_inventario import preparar_backup
         preparar_backup()
         db.create_all()
+        from schema_usuarios import atualizar_schema as atualizar_schema_usuarios
+        atualizar_schema_usuarios()
         from schema_inventario import atualizar_schema as atualizar_schema_inventario
         atualizar_schema_inventario()
         from schema_mensal import atualizar_schema_mensal
@@ -113,6 +115,11 @@ def create_app(database=None):
     def context():
         from inventario_models import UnidadeEstoque
         session.setdefault('csrf',secrets.token_hex(24))
+        from estoque_acesso import exclusivo, unidade_usuario
+        if exclusivo():
+            from types import SimpleNamespace
+            unit=unidade_usuario()
+            return dict(menus=[],tipos=[],statuses=[],categorias=[],consultores=[],mecanicos=[],consultores_mensais=[],unidades=[unit.nome],config=SimpleNamespace(unidade=unit.nome),csrf=session['csrf'])
         return dict(menus=MENUS,tipos=TIPOS,statuses=STATUS,categorias=CATEGORIAS,consultores=db.session.scalars(db.select(Consultor)).all(),mecanicos=db.session.scalars(db.select(Mecanico)).all(),config=db.session.get(Configuracao,1),consultores_mensais=db.session.execute(db.select(FaturamentoConsultor.codigo,FaturamentoConsultor.nome).distinct()).all(),unidades=sorted(set(db.session.scalars(db.select(Passagem.unidade).distinct()).all()+db.session.scalars(db.select(FaturamentoMensal.unidade).distinct()).all()+db.session.scalars(db.select(Pedido.unidade).distinct()).all()+db.session.scalars(db.select(UnidadeEstoque.nome)).all()+[db.session.get(Configuracao,1).unidade])),csrf=session['csrf'])
     from indicadores import prazo
     app.jinja_env.globals['prazo_registro']=prazo
@@ -431,4 +438,3 @@ if __name__=='__main__':
         finally: probe.close()
     print(f'Controle de Oficina Motoshow: http://localhost:{port}')
     app.run(host='127.0.0.1',port=port,debug=False)
-

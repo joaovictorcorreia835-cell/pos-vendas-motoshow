@@ -21,6 +21,31 @@ class InventarioTest(unittest.TestCase):
     setUp=OficinaTest.setUp
     tearDown=OficinaTest.tearDown
 
+    def test_pdvs_separados_lavagem_desativada_e_historico_preservado(self):
+        with self.app.app_context():
+            old=LocalEstoque(codigo='LAVAGEM',nome='LAVAGEM',grupo='LAVAGEM',fisica=True)
+            db.session.add(old);db.session.flush();old_id=old.id
+            svc.defaults();svc.defaults()
+            self.assertFalse(old.ativo)
+            self.assertIsNotNone(db.session.get(LocalEstoque,old_id))
+            with self.assertRaises(ValueError):svc.local('LAVAGEM')
+            for n,code in [(901,'PDV_CIDADE_JARDIM'),(902,'PDV_NOVO_HORIZONTE')]:
+                m=svc.cadastrar(dict(chassi=vin(n),modelo=code,unidade='Parauapebas'))
+                svc.mover(m,code,'Conferência do novo PDV')
+                self.assertEqual(m.localizacao.grupo,'PDV');self.assertIsNotNone(m.entrou_pdv_em)
+            stats=svc.indicadores()
+            self.assertEqual(stats['por_local']['PDV'],2)
+            self.assertEqual(stats['por_codigo']['PDV_CIDADE_JARDIM'],1)
+            self.assertEqual(stats['por_codigo']['PDV_NOVO_HORIZONTE'],1)
+            db.session.commit()
+        for path in ['/patio','/patio/pdv','/patio/mestre?localizacao=PDV_CIDADE_JARDIM']:
+            response=self.c.get(path);self.assertEqual(response.status_code,200)
+            self.assertNotIn('<span>Lavagem</span>',response.text)
+        from inventario import consulta
+        with self.app.test_request_context():
+            self.assertEqual(len(consulta({'localizacao':'PDV_CIDADE_JARDIM'})),1)
+            self.assertEqual(len(consulta({'localizacao':'PDV'})),2)
+
     def moto(self,n=1,location=None,status='DISPONÍVEL',unit='Parauapebas'):
         with self.app.app_context():
             m=svc.cadastrar(dict(chassi=vin(n),modelo='Moto teste '+str(n),cor='Azul',unidade=unit,status_comercial=status,data_entrada=(agora().date()-timedelta(days=50)).isoformat()))

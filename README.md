@@ -261,3 +261,7 @@ Relatórios emitidos às 18:08 e 18:09, reconciliados: 274 OS faturadas, R$ 78.0
 A fila completa passa a 86 OS abertas e R$ 105.540,00: 75 no relatório de abertas, sete antigas de garantia e quatro pendentes de conferência por não constarem nos novos arquivos (51941, 52068, 52008, 52142). A relação completa foi salva em `imports/conferencia_174_175/abertas_fora_relatorio.json`.
 
 Backup anterior criado e transação concluída após a validação. Vendas de balcão, pedidos e todas as linhas do consolidado mensal, inclusive mão de obra manual, foram comparados antes/depois e permanecem iguais. O quadro por consultor continua excluindo mão de obra do gráfico, dos totais e das participações. Indicadores de OS, prazos e tickets se recalculam automaticamente. Conferência e resultado em `imports/conferencia_174_175/`.
+
+## Perfil exclusivo do estoque de motos
+
+Veja [PERFIL_ESTOQUE_MOTOS.md](PERFIL_ESTOQUE_MOTOS.md) para criar acessos ESTOQUE_MOTOS vinculados à unidade, conferir permissões, recebimentos, conferência em massa e os PDVs Cidade Jardim e Novo Horizonte.

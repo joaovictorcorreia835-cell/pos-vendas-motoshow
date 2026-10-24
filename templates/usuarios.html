@@ -4,11 +4,15 @@
   <p class="muted">Cadastre um acesso individual para cada pessoa da equipe. Somente o administrador principal pode cadastrar usuários e acessar backups.</p>
   <form method="post" action="{{url_for('cadastrar_usuario')}}" class="settings-grid">
     <input type="hidden" name="csrf" value="{{csrf}}">
+    <label>Nome<input name="nome" maxlength="160" required></label>
     <label>Usuário<input name="usuario" minlength="3" maxlength="80" pattern="[a-zA-Z0-9][a-zA-Z0-9._\-]{2,79}" autocomplete="off" placeholder="Ex.: consultor.joao" required><small class="muted">Letras sem acento, números, ponto, hífen ou sublinhado.</small></label>
     <label>Senha inicial<input type="password" name="senha" minlength="12" maxlength="128" autocomplete="new-password" required><small class="muted">Entre 12 e 128 caracteres.</small></label>
     <label>Confirmar senha<input type="password" name="confirmar" minlength="12" maxlength="128" autocomplete="new-password" required></label>
+    <label>Perfil<select name="perfil">{% for perfil in perfis_usuarios %}<option {{'selected' if perfil=='OPERADOR'}}>{{perfil}}</option>{% endfor %}</select></label>
+    <label>Unidade<select name="unidade_id"><option value="">Todas (exceto ESTOQUE_MOTOS)</option>{% for u in unidades_usuarios %}<option value="{{u.id}}">{{u.nome}}</option>{% endfor %}</select><small>Obrigatória para ESTOQUE_MOTOS.</small></label>
+    <label>Ativo<select name="ativo"><option value="sim">Sim</option><option value="nao">Não</option></select></label>
     <div><button class="btn btn-primary" type="submit">Cadastrar usuário</button></div>
   </form>
-  <div class="table-responsive mt-4"><table class="table"><thead><tr><th>Usuário cadastrado</th><th>Acesso</th></tr></thead><tbody>{% for usuario in usuarios_cadastrados %}<tr><td>{{usuario.login}}</td><td>{{'Administrador principal' if usuario.administrador else 'Operador'}}</td></tr>{% endfor %}</tbody></table></div>
-</section>
-{% endif %}
+  {% for usuario in usuarios_cadastrados %}<section class="panel"><strong>{{usuario.login}} • {{usuario.nome}} • {{'ADMIN principal' if usuario.id==1 else usuario.perfil}} • {{nomes_unidades_usuarios.get(usuario.unidade_id,'Todas')}} • {{'Ativo' if usuario.ativo else 'Inativo'}}</strong>
+  {% if usuario.id!=1 and usuario.id!=g.usuario.id %}<details><summary>Editar perfil / unidade / situação</summary><form method="post" action="{{url_for('atualizar_usuario',ident=usuario.id)}}" class="settings-grid"><input type="hidden" name="csrf" value="{{csrf}}"><label>Nome<input name="nome" value="{{usuario.nome}}" maxlength="160"></label><label>Perfil<select name="perfil">{% for perfil in perfis_usuarios %}<option {{'selected' if usuario.perfil==perfil}}>{{perfil}}</option>{% endfor %}</select></label><label>Unidade<select name="unidade_id"><option value="">Todas (exceto ESTOQUE_MOTOS)</option>{% for u in unidades_usuarios %}<option value="{{u.id}}" {{'selected' if usuario.unidade_id==u.id}}>{{u.nome}}</option>{% endfor %}</select></label><label>Ativo<select name="ativo"><option value="sim" {{'selected' if usuario.ativo}}>Sim</option><option value="nao" {{'selected' if not usuario.ativo}}>Não</option></select></label><button class="btn btn-primary">Salvar acesso</button></form></details>{% endif %}</section>{% endfor %}
+</section>{% endif %}

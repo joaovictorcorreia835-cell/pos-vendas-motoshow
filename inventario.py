@@ -13,6 +13,7 @@ from sqlalchemy.orm.exc import StaleDataError
 from inventario_models import *
 import inventario_service as svc
 from models import Usuario
+import estoque_acesso as acesso
 
 bp=Blueprint('inventario',__name__,url_prefix='/patio')
 
@@ -48,12 +49,13 @@ def mutacao(minimo):
 def contexto():
     return dict(papel_estoque=svc.papel(),comerciais=svc.COMERCIAIS,
         locais_estoque=db.session.scalars(select(LocalEstoque).where(LocalEstoque.ativo.is_(True)).order_by(LocalEstoque.id)).all(),
-        unidades_estoque=db.session.scalars(select(UnidadeEstoque).where(UnidadeEstoque.ativo.is_(True)).order_by(UnidadeEstoque.nome)).all())
+        unidades_estoque=db.session.scalars(select(UnidadeEstoque).where(UnidadeEstoque.ativo.is_(True),UnidadeEstoque.id==acesso.unidade_usuario().id) if acesso.exclusivo() else select(UnidadeEstoque).where(UnidadeEstoque.ativo.is_(True)).order_by(UnidadeEstoque.nome)).all(),
+        destinos_estoque=db.session.scalars(select(UnidadeEstoque).where(UnidadeEstoque.ativo.is_(True)).order_by(UnidadeEstoque.nome)).all())
 
 
 def consulta(args=None):
     args=request.args if args is None else args
-    query=select(MotoEstoque).options(selectinload(MotoEstoque.localizacao))
+    query=acesso.escopo(select(MotoEstoque),MotoEstoque).options(selectinload(MotoEstoque.localizacao))
     if args.get('situacao')=='saidas':
         query=query.where(MotoEstoque.saida_fisica_confirmada.is_(True))
     elif args.get('situacao')!='todas':
@@ -62,6 +64,8 @@ def consulta(args=None):
         query=query.where(MotoEstoque.unidade_nome==args['unidade'])
     if args.get('localizacao'):
         query=query.join(LocalEstoque).where(db.or_(LocalEstoque.codigo==args['localizacao'],LocalEstoque.grupo==args['localizacao']))
+    if args.get('excluir_transito')=='sim':
+        query=query.where(MotoEstoque.localizacao_id.not_in(select(LocalEstoque.id).where(LocalEstoque.grupo=='TRANSITO')))
     if args.get('status'):
         query=query.where(MotoEstoque.status_comercial==args['status'])
     if args.get('modelo'):
@@ -88,6 +92,70 @@ def consulta(args=None):
 
 def render(view,**kwargs):
     return render_template(view,page='patio',**kwargs)
+
+
+def dashboard_estoque():
+    rows=consulta()
+    last=db.session.scalar(acesso.escopo(select(InventarioMoto),InventarioMoto).order_by(InventarioMoto.id.desc()).limit(1))
+    return render('estoque_dashboard.html',indicadores=svc.indicadores(rows),
+        atrasadas=sum(m.dias_estoque is not None and m.dias_estoque>45 and m.localizacao.grupo!='TRANSITO' for m in rows),
+        ultimo=last,resumo_ultimo=svc.resumo_inventario(last) if last else None)
+
+
+@bp.get('/movimentacoes')
+def movimentacoes():
+    query=select(MovimentacaoMoto)
+    if acesso.exclusivo():
+        uid=acesso.unidade_usuario().id
+        query=query.where(db.or_(MovimentacaoMoto.moto_id.in_(select(MotoEstoque.id).where(MotoEstoque.unidade_id==uid)),
+            db.and_(MovimentacaoMoto.moto_id.is_(None),MovimentacaoMoto.inventario_id.in_(select(InventarioMoto.id).where(InventarioMoto.unidade_id==uid)))))
+    page=max(1,request.args.get('pagina',1,type=int))
+    rows=db.session.scalars(query.order_by(MovimentacaoMoto.id.desc()).offset((page-1)*50).limit(51)).all()
+    return render('estoque_movimentacoes.html',rows=rows[:50],pagina=page,mais=len(rows)>50)
+
+
+@bp.route('/conferencia-massa',methods=['GET','POST'])
+def massa():
+    if request.method=='POST':return conferir_massa()
+    return render('estoque_massa.html')
+
+
+@mutacao('OPERADOR')
+def conferir_massa():
+    lines=[v.strip() for v in request.form.get('chassis','').splitlines() if v.strip()]
+    if not 1<=len(lines)<=100:raise ValueError('Informe entre 1 e 100 chassis, um por linha.')
+    vins=[svc.normalizar_chassi(v) for v in lines]
+    if len(set(vins))!=len(vins):raise ValueError('Há chassis repetidos na conferência em massa.')
+    # Validar todo o lote antes de movimentar; uma recusa desfaz tudo.
+    motos=[]
+    for vin in vins:
+        m=db.session.scalar(select(MotoEstoque).where(MotoEstoque.chassi_normalizado==vin).with_for_update())
+        if not m:raise ValueError('Chassi não cadastrado. Use o inventário para registrar extras.')
+        acesso.verificar_moto(m);motos.append(m)
+    for m in motos:svc.mover(m,request.form.get('localizacao'),request.form.get('observacao',''),'CONFERÊNCIA EM MASSA')
+    flash(f'{len(motos)} motos conferidas com auditoria individual.','success')
+    return redirect(url_for('inventario.massa'))
+
+
+@bp.get('/recebimentos')
+def recebimentos():
+    query=select(TransferenciaMoto).where(TransferenciaMoto.pendente_moto.is_not(None))
+    if acesso.exclusivo():query=query.where(TransferenciaMoto.unidade_destino_id==acesso.unidade_usuario().id)
+    rows=db.session.scalars(query.order_by(TransferenciaMoto.id)).all()
+    motos={t.moto_id:db.session.get(MotoEstoque,t.moto_id) for t in rows}
+    return render('estoque_recebimentos.html',rows=rows,motos=motos)
+
+
+@bp.post('/recebimentos/<int:ident>')
+@mutacao('OPERADOR')
+def receber_transferencia(ident):
+    transfer=db.session.scalar(select(TransferenciaMoto).where(TransferenciaMoto.id==ident).with_for_update())
+    if not transfer or not transfer.pendente_moto:abort(404)
+    acesso.verificar_unidade(transfer.unidade_destino_id)
+    m=db.session.scalar(select(MotoEstoque).where(MotoEstoque.id==transfer.moto_id).with_for_update())
+    svc.receber(m,request.form.get('localizacao'),request.form.get('observacao',''))
+    flash('Recebimento confirmado com auditoria.','success')
+    return redirect(url_for('inventario.ficha',ident=m.id))
 
 
 @bp.get('/mestre')
@@ -135,7 +203,7 @@ def acao_moto(ident):
     elif action=='receber':
         svc.receber(m,request.form.get('localizacao'),note)
     else:
-        svc.permitir('GESTOR')
+        if not (acesso.exclusivo() and action in ('saida','transferir')):svc.permitir('GESTOR')
         if action=='saida':svc.saida(m,request.form.get('destino'),request.form.get('motivo'),request.form.get('responsavel'),note)
         elif action=='retorno':svc.retorno(m,request.form.get('localizacao'),note)
         elif action=='transferir':svc.transferir(m,request.form.get('destino_unidade'),note)
@@ -178,13 +246,14 @@ def api_localizar():
 
 @bp.get('/inventarios')
 def inventarios():
-    rows=db.session.scalars(select(InventarioMoto).order_by(InventarioMoto.id.desc())).all()
+    rows=db.session.scalars(acesso.escopo(select(InventarioMoto),InventarioMoto).order_by(InventarioMoto.id.desc())).all()
     return render('estoque_inventarios.html',rows=rows)
 
 
 @bp.post('/inventarios/novo')
-@mutacao('GESTOR')
+@mutacao('OPERADOR')
 def novo_inventario():
+    if not acesso.exclusivo():svc.permitir('GESTOR')
     inv=svc.abrir_inventario(request.form.get('unidade_id'),request.form.get('nome',''),request.form.get('primeiro')=='sim',request.form.get('escopo','todos')=='todos')
     return redirect(url_for('inventario.contagem',ident=inv.id))
 
@@ -197,9 +266,12 @@ def contagem(ident):
         try:
             vin=svc.normalizar_chassi(q)
             match=db.session.scalar(select(MotoEstoque).where(MotoEstoque.chassi_normalizado==vin))
+            acesso.verificar_moto(match)
             duplicate=db.session.scalar(select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==ident,InventarioMotoItem.chassi==vin,InventarioMotoItem.encontrado.is_(True)))
         except ValueError as error:flash(str(error),'warning')
-    items=db.session.scalars(select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==ident).order_by(InventarioMotoItem.conferido_em.desc(),InventarioMotoItem.id)).all()
+    query=select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==ident)
+    if acesso.exclusivo():query=query.where(db.or_(InventarioMotoItem.moto_id.is_(None),InventarioMotoItem.moto_id.in_(acesso.escopo(select(MotoEstoque.id),MotoEstoque))))
+    items=db.session.scalars(query.order_by(InventarioMotoItem.conferido_em.desc(),InventarioMotoItem.id)).all()
     return render('estoque_contagem.html',inv=inv,resumo=svc.resumo_inventario(inv),items=items,match=match,q=q,duplicada=duplicate)
 
 
@@ -232,7 +304,7 @@ def encerrar(ident):
 
 @bp.get('/divergencias')
 def divergencias():
-    query=select(DivergenciaMoto)
+    query=acesso.divergencias_query(select(DivergenciaMoto))
     if request.args.get('inventario',type=int):query=query.where(DivergenciaMoto.inventario_id==request.args.get('inventario',type=int))
     if request.args.get('situacao')!='todas':query=query.where(DivergenciaMoto.resolvido.is_(False))
     rows=db.session.scalars(query.order_by(DivergenciaMoto.id.desc())).all()
@@ -247,10 +319,13 @@ def divergencias():
 
 
 @bp.post('/divergencias/<int:ident>/resolver')
-@mutacao('GESTOR')
+@mutacao('OPERADOR')
 def resolver(ident):
     d=db.session.scalar(select(DivergenciaMoto).where(DivergenciaMoto.id==ident).with_for_update())
     if not d:abort(404)
+    if acesso.exclusivo():
+        if d.tipo!='LOCALIZAÇÃO DIVERGENTE' or request.form.get('acao','JUSTIFICAR') not in ('JUSTIFICAR','CORRIGIR LOCALIZAÇÃO'):abort(403)
+    else:svc.permitir('GESTOR')
     svc.resolver(d,request.form.get('justificativa',''),request.form.get('acao','JUSTIFICAR'),request.form.get('localizacao'),dict(request.form))
     flash('Resolução registrada com auditoria.','success')
     return redirect(url_for('inventario.divergencias',inventario=d.inventario_id) if d.inventario_id else url_for('inventario.divergencias'))
@@ -314,7 +389,8 @@ def salvar_configuracao():
         svc.auditar(None,'POLÍTICA DE CONFERÊNCIA',before,novo=dict(recente=a,vencida=b))
     elif kind=='papel':
         svc.permitir('ADMIN'); uid=int(request.form['usuario_id']); role=request.form.get('papel')
-        if role not in svc.RANK or not db.session.get(Usuario,uid) or uid==1:raise ValueError('Usuário ou papel inválido. A administração principal é preservada.')
+        if role not in ('ADMIN','GESTOR','OPERADOR','CONSULTA') or not db.session.get(Usuario,uid) or uid==1:raise ValueError('Usuário ou papel inválido. Para acesso exclusivo use a administração de usuários.')
+        if db.session.get(Usuario,uid).estoque_exclusivo:raise ValueError('Edite o perfil exclusivo em Configurações → Usuários do sistema.')
         p=db.session.get(PapelEstoque,uid); before=dict(usuario_id=uid,papel=p.papel if p else 'OPERADOR')
         if p is None:p=PapelEstoque(usuario_id=uid);db.session.add(p)
         p.papel=role;svc.auditar(None,'PERMISSÃO DE ESTOQUE',before,novo=dict(usuario_id=uid,papel=role))

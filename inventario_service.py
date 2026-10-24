@@ -12,8 +12,9 @@ from sqlalchemy.orm import selectinload
 from inventario_models import *
 
 COMERCIAIS = ('DISPONÍVEL', 'RESERVADA', 'AGUARDANDO APROVAÇÃO', 'FATURADA', 'VENDIDA', 'TRANSFERÊNCIA', 'DEMONSTRAÇÃO', 'OUTRO')
-PADRAO_LOCAIS = [('PATIO','PÁTIO',True),('PDV','PDV / SALÃO',True),('OFICINA','OFICINA',True),('LAVAGEM','LAVAGEM',True),('ENTREGA','ENTREGA',True),('TRANSITO','TRÂNSITO',False),('OUTRA_UNIDADE','OUTRA UNIDADE',False),('NAO_LOCALIZADA','NÃO LOCALIZADA',False),('A_CONFIRMAR','A CONFIRMAR',False)]
+PADRAO_LOCAIS = [('PATIO','PÁTIO',True),('PDV','PDV / SALÃO',True),('PDV_CIDADE_JARDIM','PDV CIDADE JARDIM',True),('PDV_NOVO_HORIZONTE','PDV NOVO HORIZONTE',True),('OFICINA','OFICINA',True),('ENTREGA','ENTREGA',True),('TRANSITO','TRÂNSITO',False),('OUTRA_UNIDADE','OUTRA UNIDADE',False),('NAO_LOCALIZADA','NÃO LOCALIZADA',False),('A_CONFIRMAR','A CONFIRMAR',False)]
 RANK = {'CONSULTA':0, 'OPERADOR':1, 'GESTOR':2, 'ADMIN':3}
+RANK['ESTOQUE_MOTOS']=1
 
 
 def status_fonte(value):
@@ -38,8 +39,10 @@ def papel(user=None):
         return 'CONSULTA'
     if user.administrador:
         return 'ADMIN'
+    if user.estoque_exclusivo:
+        return 'ESTOQUE_MOTOS'
     row = db.session.get(PapelEstoque, user.id)
-    return row.papel if row else 'OPERADOR'
+    return row.papel if row else user.perfil if user.perfil in ('GESTOR','ADMIN') else 'OPERADOR'
 
 
 def permitir(minimo):
@@ -69,7 +72,10 @@ def local(ident):
 def defaults():
     for code, name, physical in PADRAO_LOCAIS:
         if not db.session.scalar(select(LocalEstoque.id).where(LocalEstoque.codigo == code)):
-            db.session.add(LocalEstoque(codigo=code, nome=name, grupo=code, fisica=physical))
+            db.session.add(LocalEstoque(codigo=code, nome=name, grupo='PDV' if code.startswith('PDV_') else code, fisica=physical))
+    # Retira das novas operações sem apagar referências e auditorias anteriores.
+    for retired in db.session.scalars(select(LocalEstoque).where(LocalEstoque.grupo=='LAVAGEM')):
+        retired.ativo=False
     if db.session.get(PoliticaEstoque, 1) is None:
         db.session.add(PoliticaEstoque(id=1))
     db.session.flush()
@@ -108,6 +114,8 @@ def obter_moto(ident, revisao=None):
     m = db.session.scalar(select(MotoEstoque).where(MotoEstoque.id == ident).with_for_update())
     if not m:
         raise ValueError('Moto não cadastrada.')
+    from estoque_acesso import verificar_moto
+    verificar_moto(m)
     if revisao is not None and int(revisao) != m.revisao:
         raise ValueError('Esta moto foi alterada por outro usuário. Atualize a página.')
     return m
@@ -145,6 +153,8 @@ def pendente_transferencia(m):
 
 
 def mover(m, destino, observacao='', tipo='ALTERAÇÃO DE LOCALIZAÇÃO', inventario_id=None, recebimento=False):
+    from estoque_acesso import verificar_moto
+    verificar_moto(m)
     if m.saida_fisica_confirmada or not m.ativo:
         raise ValueError('Confirme o retorno antes de movimentar uma moto que saiu.')
     if pendente_transferencia(m) and not recebimento:
@@ -167,6 +177,8 @@ def mover(m, destino, observacao='', tipo='ALTERAÇÃO DE LOCALIZAÇÃO', invent
 
 
 def saida(m, destino, motivo, responsavel, observacao=''):
+    from estoque_acesso import verificar_moto
+    verificar_moto(m)
     if not all(str(v or '').strip() for v in (destino,motivo,responsavel)):
         raise ValueError('Informe destino, motivo e responsável pela saída física.')
     if len(destino)>200 or len(motivo)>200 or len(responsavel)>150:
@@ -206,6 +218,8 @@ def receber(m, destino, observacao):
     transfer=pendente_transferencia(m)
     if not transfer:
         raise ValueError('Não há transferência pendente.')
+    from estoque_acesso import verificar_unidade
+    verificar_unidade(transfer.unidade_destino_id)
     target=local(destino)
     if not target.fisica:
         raise ValueError('Selecione o local físico do recebimento.')
@@ -217,6 +231,8 @@ def receber(m, destino, observacao):
 
 
 def abrir_inventario(unidade_id,nome,primeiro=False,incluir_transito=True):
+    from estoque_acesso import verificar_unidade
+    verificar_unidade(int(unidade_id))
     unit=db.session.get(UnidadeEstoque,int(unidade_id))
     if not unit or not unit.ativo or not nome.strip():
         raise ValueError('Selecione a unidade e dê um nome ao inventário.')
@@ -242,6 +258,8 @@ def inventario_aberto(ident):
     inv=db.session.scalar(select(InventarioMoto).where(InventarioMoto.id==ident).with_for_update())
     if not inv or inv.status in ('CONCLUÍDO','CANCELADO'):
         raise ValueError('Inventário inexistente ou encerrado. O resultado final é imutável.')
+    from estoque_acesso import verificar_unidade
+    verificar_unidade(inv.unidade_id)
     return inv
 
 
@@ -273,9 +291,12 @@ def resumo_inventario(inv):
 
 
 def conferir(inv,vin,destino,corrigir=False,observacao=''):
+    from estoque_acesso import verificar_unidade, verificar_moto
+    verificar_unidade(inv.unidade_id)
     vin=normalizar_chassi(vin); target=local(destino)
     item=db.session.scalar(select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==inv.id,InventarioMotoItem.chassi==vin).with_for_update())
     m=db.session.scalar(select(MotoEstoque).where(MotoEstoque.chassi_normalizado==vin).with_for_update())
+    verificar_moto(m)
     if item is None and m:
         item=db.session.scalar(select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==inv.id,InventarioMotoItem.moto_id==m.id).with_for_update())
     if item and item.encontrado and not corrigir:
@@ -496,7 +517,7 @@ def indicadores(rows=None):
     counts=Counter(m.localizacao.grupo for m in active)
     reconciled=sum(m.presenca_confirmada and m.id not in pending for m in active)
     return dict(total=len(active),localizadas=localizadas,a_confirmar=sum(m.data_ultima_confirmacao is None or m.localizacao.grupo=='A_CONFIRMAR' for m in active),
-        divergencias=sum(m.id in pending for m in active),por_local=dict(counts),conciliacao=round(reconciled*100/len(active),2) if active else 0,
+        divergencias=sum(m.id in pending for m in active),por_local=dict(counts),por_codigo=dict(Counter(m.localizacao.codigo for m in active)),conciliacao=round(reconciled*100/len(active),2) if active else 0,
         saidas_hoje=sum(m.saida_fisica_confirmada and m.data_saida_fisica and m.data_saida_fisica.date()==agora().date() for m in rows))
 
 

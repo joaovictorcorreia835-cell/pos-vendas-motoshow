@@ -20,11 +20,19 @@ class Usuario(db.Model):
     versao = db.Column(db.Integer, nullable=False, default=1)
     tentativas = db.Column(db.Integer, nullable=False, default=0)
     bloqueado_ate = db.Column(db.DateTime)
+    nome = db.Column(db.String(160), nullable=False, default='')
+    perfil = db.Column(db.String(30), nullable=False, default='OPERADOR')
+    unidade_id = db.Column(db.Integer, db.ForeignKey('unidade_estoque.id'))
+    ativo = db.Column(db.Boolean, nullable=False, default=True)
+
+    @property
+    def estoque_exclusivo(self):
+        return self.id != 1 and self.perfil == 'ESTOQUE_MOTOS'
 
     @property
     def administrador(self):
         # A conta inicial conserva a administração; cadastros seguintes são operadores.
-        return self.id == 1
+        return self.id == 1 or self.perfil == 'ADMIN'
 
 class Cliente(db.Model):
     id = db.Column(db.Integer, primary_key=True)

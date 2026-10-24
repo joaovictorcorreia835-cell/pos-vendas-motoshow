@@ -24,7 +24,7 @@ def configure_auth(app):
     def require_login():
         session.setdefault('csrf',secrets.token_hex(24))
         g.usuario=db.session.get(Usuario,session.get('usuario_id')) if session.get('usuario_id') else None
-        if g.usuario and session.get('usuario_versao')!=g.usuario.versao:
+        if g.usuario and (not g.usuario.ativo or session.get('usuario_versao')!=g.usuario.versao):
             g.usuario=None
             session.clear()
         if request.endpoint in ['login','static','healthz']:
@@ -35,33 +35,72 @@ def configure_auth(app):
             if request.method!='GET':
                 abort(400,description='Faça login e recarregue o formulário.')
             return redirect(url_for('login',next=request.full_path))
-        if request.endpoint in ['cadastrar_usuario','backup','restaurar','importacao_inicial','backup_relatorios'] and not g.usuario.administrador:
+        from estoque_acesso import autorizar_requisicao
+        denied=autorizar_requisicao()
+        if denied is not None:return denied
+        if request.endpoint in ['cadastrar_usuario','atualizar_usuario','backup','restaurar','importacao_inicial','backup_relatorios'] and not g.usuario.administrador:
             abort(403)
 
     @app.context_processor
     def usuarios_context():
         if request.endpoint=='configuracoes' and g.usuario and g.usuario.administrador:
-            return {'usuarios_cadastrados':db.session.scalars(db.select(Usuario).order_by(Usuario.login)).all()}
+            from inventario_models import UnidadeEstoque
+            from estoque_acesso import PERFIS
+            units=db.session.scalars(db.select(UnidadeEstoque).where(UnidadeEstoque.ativo.is_(True)).order_by(UnidadeEstoque.nome)).all()
+            return {'usuarios_cadastrados':db.session.scalars(db.select(Usuario).order_by(Usuario.login)).all(),'perfis_usuarios':PERFIS,'unidades_usuarios':units,'nomes_unidades_usuarios':{u.id:u.nome for u in units}}
         return {}
 
     @app.post('/configuracoes/usuarios')
     def cadastrar_usuario():
         name=request.form.get('usuario','').strip().lower()
         password=request.form.get('senha','')
+        from estoque_acesso import PERFIS
+        from inventario_models import UnidadeEstoque, PapelEstoque
+        role=request.form.get('perfil','OPERADOR')
+        unit=db.session.get(UnidadeEstoque,request.form.get('unidade_id',type=int)) if request.form.get('unidade_id') else None
+        display=request.form.get('nome','').strip()
         if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{2,79}',name):
             flash('Use um usuário de 3 a 80 caracteres: letras sem acento, números, ponto, hífen ou sublinhado.','danger')
+        elif role not in PERFIS or len(display)>160 or (request.form.get('unidade_id') and (not unit or not unit.ativo)) or (role=='ESTOQUE_MOTOS' and not unit):
+            flash('Selecione um perfil válido e uma unidade ativa para ESTOQUE_MOTOS. Nome: até 160 caracteres.','danger')
         elif not 12<=len(password)<=128:
             flash('A senha deve ter entre 12 e 128 caracteres.','danger')
         elif password!=request.form.get('confirmar',''):
             flash('A confirmação da senha não confere.','danger')
         else:
             try:
-                db.session.add(Usuario(login=name,senha_hash=generate_password_hash(password)))
+                user=Usuario(login=name,nome=display,perfil=role,unidade_id=unit.id if unit else None,ativo=request.form.get('ativo','sim')=='sim',senha_hash=generate_password_hash(password))
+                db.session.add(user);db.session.flush()
+                db.session.add(PapelEstoque(usuario_id=user.id,papel='OPERADOR' if role=='ESTOQUE_MOTOS' else role))
+                from inventario_service import auditar
+                auditar(None,'CRIAÇÃO DE USUÁRIO',novo=dict(usuario_id=user.id,login=name,perfil=role,unidade_id=user.unidade_id,ativo=user.ativo))
                 db.session.commit()
                 flash('Usuário cadastrado. Ele já pode entrar no sistema e alterar sua própria senha.','success')
             except IntegrityError:
                 db.session.rollback()
                 flash('Este usuário já está cadastrado. Escolha outro nome.','danger')
+        return redirect(url_for('configuracoes')+'#usuarios')
+
+    @app.post('/configuracoes/usuarios/<int:ident>')
+    def atualizar_usuario(ident):
+        from estoque_acesso import PERFIS
+        from inventario_models import UnidadeEstoque, PapelEstoque
+        from inventario_service import auditar
+        user=db.get_or_404(Usuario,ident)
+        role=request.form.get('perfil')
+        unit=db.session.get(UnidadeEstoque,request.form.get('unidade_id',type=int)) if request.form.get('unidade_id') else None
+        active=request.form.get('ativo')=='sim'
+        display=request.form.get('nome','').strip()
+        if ident==1 or ident==g.usuario.id or role not in PERFIS or len(display)>160 or (request.form.get('unidade_id') and (not unit or not unit.ativo)) or (role=='ESTOQUE_MOTOS' and not unit):
+            abort(400,description='Perfil/unidade inválidos ou conta protegida. A conta principal e o próprio acesso são preservados.')
+        before=dict(perfil=user.perfil,unidade_id=user.unidade_id,ativo=user.ativo,nome=user.nome)
+        user.nome=display;user.perfil=role;user.unidade_id=unit.id if unit else None;user.ativo=active;user.versao+=1
+        p=db.session.get(PapelEstoque,ident)
+        if not p:p=PapelEstoque(usuario_id=ident);db.session.add(p)
+        p.papel='OPERADOR' if role=='ESTOQUE_MOTOS' else role
+        auditar(None,'ALTERAÇÃO DE ACESSO',before,novo=dict(usuario_id=ident,perfil=role,unidade_id=user.unidade_id,ativo=active,nome=display))
+        db.session.commit()
+        flash('Acesso atualizado. As sessões anteriores deste usuário foram encerradas.','success')
         return redirect(url_for('configuracoes')+'#usuarios')
 
     @app.after_request
@@ -84,11 +123,12 @@ def configure_auth(app):
             now=datetime.utcnow()
             blocked=user and user.bloqueado_ate and user.bloqueado_ate>now
             valid=check_password_hash(user.senha_hash if user else app.config['DUMMY_PASSWORD_HASH'],request.form.get('senha',''))
-            if user and valid and not blocked:
+            if user and user.ativo and valid and not blocked:
                 user.tentativas=0; user.bloqueado_ate=None; db.session.commit()
                 session.clear(); session.permanent=True
                 session.update(usuario_id=user.id,usuario_versao=user.versao,csrf=secrets.token_hex(24))
                 target=request.args.get('next','/')
+                if user.estoque_exclusivo:target='/patio'
                 parsed=urlsplit(target)
                 if parsed.scheme or parsed.netloc or not target.startswith('/') or target.startswith('//') or '\\' in target:
                     target='/'
