@@ -58,7 +58,8 @@ class PatioTest(unittest.TestCase):
             self.assertIn('grupo=atrasadas', data['patio_atrasadas']['url'])
             self.assertIn('unidade=Parauapebas', data['patio_atrasadas']['url'])
             self.assertEqual(self.c.get('/api/dashboard?unidade=Outra').get_json()['patio_atrasadas']['quantidade'], 1)
-            self.assertIn('id="patio-overdue-count">3</strong>', self.c.get('/').text)
+            self.assertNotIn('id="patio-overdue-count"', self.c.get('/').text)
+        self.assertIn('id="patio-overdue-count"', self.c.get('/patio').text)
 
     def test_physical_location_requires_confirmation_and_survives_import(self):
         text = 'Chassi;Modelo;Situação\n9C6AAAAAAA0000004;CG 160;Disponível para venda\n9C6AAAAAAA0000005;Biz;Disponível para venda\n'
@@ -180,3 +181,4 @@ class PatioPDFTest(unittest.TestCase):
         self.assertIn('mais antigo', response.text)
         with self.app.app_context():
             self.assertEqual(db.session.query(RelatorioPatio).count(), 3)
+

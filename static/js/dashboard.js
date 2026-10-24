@@ -36,9 +36,6 @@
   });
  }
  function render(d,params){
-  put('patio-overdue-count',d.patio_atrasadas.quantidade);
-  el('patio-overdue-link').href=d.patio_atrasadas.url;
-  put('patio-overdue-note',d.patio_atrasadas.nota+'. Considera a unidade selecionada, independentemente do período de atendimentos.');
   d.totals.forEach((v,i)=>{
    put('kpi-'+i,[1,2,3,4].includes(i)?currency(v):v);
    const previous=d.previous[i],rate=previous?(v-previous)*100/previous:null;
@@ -98,3 +95,4 @@
  setInterval(()=>{if(!document.hidden&&Date.now()-lastUpdated>=60000)refresh(true);},60000);
  window.addEventListener('focus',()=>{if(Date.now()-lastUpdated>=60000)refresh(true);});
 })();
+
