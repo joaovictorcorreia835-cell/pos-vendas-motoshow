@@ -2,7 +2,7 @@
 
 ## Situação da entrega
 
-Implementação validada localmente em 24/10/2026. Suíte completa: **153 executados, 153 aprovados, 0 falhas e 0 erros**. Publicação em produção em andamento.
+Implementação validada localmente em 24/10/2026. Suíte completa: **153 executados, 153 aprovados, 0 falhas e 0 erros**. Publicado em produção em **24/10/2026**, com deploy `dep-dbedft0473hc7390gc00` confirmado como `live`. Migração `APLICADA`; 203 cadastros no mestre, 0 localizadas e 203 a confirmar, conforme o log real de inicialização. Backup lógico registrado antes da migração.
 
 O navegador conectado não estava disponível nesta sessão. Os templates e as rotas são verificados por testes; a conferência visual em desktop/celular permanece no checklist manual abaixo.
 

@@ -111,8 +111,9 @@ def create_app(database=None):
         return f'({n[:2]}) {n[2:-4]}-{n[-4:]}' if len(n) in [10,11] else n
     @app.context_processor
     def context():
+        from inventario_models import UnidadeEstoque
         session.setdefault('csrf',secrets.token_hex(24))
-        return dict(menus=MENUS,tipos=TIPOS,statuses=STATUS,categorias=CATEGORIAS,consultores=db.session.scalars(db.select(Consultor)).all(),mecanicos=db.session.scalars(db.select(Mecanico)).all(),config=db.session.get(Configuracao,1),consultores_mensais=db.session.execute(db.select(FaturamentoConsultor.codigo,FaturamentoConsultor.nome).distinct()).all(),unidades=sorted(set(db.session.scalars(db.select(Passagem.unidade).distinct()).all()+db.session.scalars(db.select(FaturamentoMensal.unidade).distinct()).all()+db.session.scalars(db.select(Pedido.unidade).distinct()).all()+[db.session.get(Configuracao,1).unidade])),csrf=session['csrf'])
+        return dict(menus=MENUS,tipos=TIPOS,statuses=STATUS,categorias=CATEGORIAS,consultores=db.session.scalars(db.select(Consultor)).all(),mecanicos=db.session.scalars(db.select(Mecanico)).all(),config=db.session.get(Configuracao,1),consultores_mensais=db.session.execute(db.select(FaturamentoConsultor.codigo,FaturamentoConsultor.nome).distinct()).all(),unidades=sorted(set(db.session.scalars(db.select(Passagem.unidade).distinct()).all()+db.session.scalars(db.select(FaturamentoMensal.unidade).distinct()).all()+db.session.scalars(db.select(Pedido.unidade).distinct()).all()+db.session.scalars(db.select(UnidadeEstoque.nome)).all()+[db.session.get(Configuracao,1).unidade])),csrf=session['csrf'])
     from indicadores import prazo
     app.jinja_env.globals['prazo_registro']=prazo
     @app.before_request

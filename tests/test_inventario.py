@@ -179,6 +179,8 @@ class InventarioTest(unittest.TestCase):
             self.assertEqual(db.session.query(MotoEstoque).count(),2)
             self.assertEqual(inv.resultado_final['esperadas'],1);self.assertEqual(inv.resultado_final['extras'],1)
             self.assertEqual(inv.resultado_final['conciliacao'],100)
+            extra_id=db.session.scalar(db.select(MotoEstoque.id).where(MotoEstoque.chassi_normalizado==vin(2)))
+        self.assertIn('INVENTÁRIO / EXTRA',self.c.get('/patio/motos/'+str(extra_id)).text)
 
     def test_constraint_uma_sessao_aberta_por_unidade(self):
         self.moto();self.iniciar()
@@ -259,6 +261,7 @@ class InventarioTest(unittest.TestCase):
             self.assertIsNotNone(db.session.scalar(db.select(UnidadeEstoque).where(UnidadeEstoque.nome=='Filial B')))
             custom=db.session.scalar(db.select(LocalEstoque).where(LocalEstoque.nome=='Pátio A'));self.assertEqual(custom.grupo,'PATIO')
             policy=db.session.get(PoliticaEstoque,1);self.assertEqual(policy.vencida_dias,20)
+        self.assertIn('Filial B',self.c.get('/').text)
 
     def test_contagem_concorrente_dois_usuarios_uma_unica_moto(self):
         self.moto();inv_id=self.iniciar()

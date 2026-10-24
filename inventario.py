@@ -118,7 +118,7 @@ def salvar_nova():
 @bp.get('/motos/<int:ident>')
 def ficha(ident):
     m=db.get_or_404(MotoEstoque,ident)
-    events=db.session.scalars(select(MovimentacaoMoto).where(MovimentacaoMoto.moto_id==ident).order_by(MovimentacaoMoto.data_hora.desc(),MovimentacaoMoto.id.desc())).all()
+    events=db.session.scalars(select(MovimentacaoMoto).where(db.or_(MovimentacaoMoto.moto_id==ident,db.and_(MovimentacaoMoto.moto_id.is_(None),MovimentacaoMoto.chassi==m.chassi_normalizado))).order_by(MovimentacaoMoto.data_hora.desc(),MovimentacaoMoto.id.desc())).all()
     differences=db.session.scalars(select(DivergenciaMoto).where(DivergenciaMoto.moto_id==ident).order_by(DivergenciaMoto.id.desc())).all()
     transfer=svc.pendente_transferencia(m)
     target=db.session.get(UnidadeEstoque,transfer.unidade_destino_id).nome if transfer else ''
