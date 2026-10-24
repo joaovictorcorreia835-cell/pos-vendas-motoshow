@@ -393,6 +393,8 @@ def encerrar(inv,observacao='',cancelar=False):
         if result['pendentes']:
             raise ValueError('Resolva ou justifique todas as divergências antes de encerrar.')
     else:
+        for d in db.session.scalars(select(DivergenciaMoto).where(DivergenciaMoto.inventario_id==inv.id,DivergenciaMoto.resolvido.is_(False))).all():
+            resolver(d,'Inventário cancelado: '+observacao,'JUSTIFICAR')
         result=resumo_inventario(inv)
     db.session.flush()
     inv.resultado_final=dict(result,escopo=inv.observacao,itens=[dict(chassi=i.chassi,esperado=i.esperado,snapshot=i.snapshot,encontrado=i.encontrado,localizacao=i.localizacao_encontrada,conferido_em=str(i.conferido_em or ''),conferido_por=i.conferido_por,justificativa=i.justificativa) for i in db.session.scalars(select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==inv.id))],

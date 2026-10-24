@@ -244,13 +244,20 @@ class InventarioTest(unittest.TestCase):
         excel=self.c.get('/patio/relatorio-estoque?export=xlsx');self.assertEqual(excel.status_code,200);self.assertTrue(excel.data.startswith(b'PK'))
         pdf=self.c.get('/patio/relatorio-estoque?export=pdf');self.assertEqual(pdf.status_code,200);self.assertTrue(pdf.data.startswith(b'%PDF'))
         self.assertIn('Faturadas ainda presentes: <strong>1</strong>',self.c.get('/patio/relatorio-estoque').text)
+        with self.app.app_context():
+            m=db.session.get(MotoEstoque,ident);m.data_ultima_confirmacao=agora()-timedelta(days=10);db.session.commit()
+        self.assertIn('Sem conferência recente: <strong>1</strong>',self.c.get('/patio/relatorio-estoque').text)
 
     def test_cancelamento_justificado_e_backup_logico(self):
         self.moto();inv_id=self.iniciar()
         with self.app.app_context():
             inv=svc.inventario_aberto(inv_id)
             with self.assertRaises(ValueError):svc.encerrar(inv,cancelar=True)
+            svc.analisar(inv)
             svc.encerrar(inv,'Cancelado para ajuste de equipe',True);db.session.commit();self.assertEqual(inv.status,'CANCELADO')
+            self.assertEqual(db.session.query(DivergenciaMoto).count(),1)
+            d=db.session.scalar(db.select(DivergenciaMoto));self.assertTrue(d.resolvido);self.assertIn('cancelado',d.justificativa)
+            self.assertEqual(inv.resultado_final['pendentes'],0)
         backup=self.c.get('/patio/backup-migracao');self.assertEqual(backup.status_code,200);self.assertIsInstance(json.loads(backup.data),dict)
 
     def test_configuracoes_papeis_conferencia_e_locais_customizados(self):

@@ -268,7 +268,7 @@ def relatorio():
     groups={label:dict(Counter(getter(m) for m in rows)) for label,getter in [('Unidade',lambda m:m.unidade_nome),('Localização',lambda m:m.localizacao.nome),('Modelo',lambda m:m.modelo),('Status comercial',lambda m:m.status_comercial)]}
     totals=dict(faturadas_presentes=sum(m.presenca_confirmada and not m.saida_fisica_confirmada and m.status_comercial=='FATURADA' for m in rows),
         vendidas_presentes=sum(m.presenca_confirmada and not m.saida_fisica_confirmada and m.status_comercial=='VENDIDA' for m in rows),
-        nao_conferidas=sum(svc.conferencia_status(m,policy) in ('NUNCA CONFERIDA','CONFERÊNCIA VENCIDA') for m in rows),
+        nao_conferidas=sum(svc.conferencia_status(m,policy) in ('NUNCA CONFERIDA','CONFERÊNCIA A RENOVAR','CONFERÊNCIA VENCIDA') for m in rows),
         dias={d:sum(m.dias_estoque is not None and m.dias_estoque>d for m in rows) for d in (15,30,45,60,90)})
     headers=['Chassi','Modelo','Cor','Unidade','Status comercial','Localização','Presença confirmada','Dias em estoque','Última conferência','Responsável','Saída física confirmada']
     data=[[m.chassi_normalizado,m.modelo,m.cor,m.unidade_nome,m.status_comercial,m.localizacao.nome,'Sim' if m.presenca_confirmada and not m.saida_fisica_confirmada else 'Não',m.dias_estoque,m.data_ultima_confirmacao,m.usuario_ultima_confirmacao,'Sim' if m.saida_fisica_confirmada else 'Não'] for m in rows]
