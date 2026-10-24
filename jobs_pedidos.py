@@ -32,7 +32,7 @@ def aplicar_pedidos(payload,digest):
                 names=', '.join('"'+t.name+'"' for t in db.metadata.sorted_tables)
                 db.session.execute(text('LOCK TABLE '+names+' IN SHARE ROW EXCLUSIVE MODE'))
             def outros():
-                return {t.name:[tuple(r) for r in db.session.execute(select(t).order_by(t.c.id))] for t in db.metadata.sorted_tables if t.name!='pedido'}
+                return {t.name:[tuple(r) for r in db.session.execute(select(t).order_by(*t.primary_key.columns))] for t in db.metadata.sorted_tables if t.name!='pedido'}
             before=outros()
             statuses={p.numero:p.status for p in db.session.scalars(select(Pedido).where(Pedido.unidade==unit))}
             backup=sqlite_snapshot(db.engine).getvalue()

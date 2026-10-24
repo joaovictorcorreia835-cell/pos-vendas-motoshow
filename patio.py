@@ -115,15 +115,58 @@ def estoque_atual():
     for moto in result:
         moto.localizacao = locations.get(moto.chassi, 'A confirmar') if not moto.parcial else 'A confirmar'
         moto.possivel_transito = any(moto.unidade == t['unidade'] and moto.chassi.startswith(t['chassi']) for t in transito) if not moto.parcial else False
+    # O mestre é persistente: ausência em relatório não apaga uma moto.
+    from inventario_models import MotoEstoque
+    from inventario_service import normalizar_chassi
+    from sqlalchemy.orm import selectinload
+    normalized={}; others=[]
+    for dto in result:
+        if dto.parcial:
+            others.append(dto); continue
+        try:
+            dto.chassi=normalizar_chassi(dto.chassi)
+            normalized.setdefault(dto.chassi,dto)
+        except ValueError:
+            dto.parcial=True
+            dto.localizacao='A confirmar'
+            others.append(dto)
+    result=list(normalized.values())+others
+    masters=db.session.scalars(db.select(MotoEstoque).options(selectinload(MotoEstoque.localizacao))).all()
+    by_vin={m.chassi:m for m in result if not m.parcial}
+    for master in masters:
+        if not master.ativo or master.saida_fisica_confirmada:
+            result=[m for m in result if m.parcial or m.chassi!=master.chassi_normalizado]
+            continue
+        dto=by_vin.get(master.chassi_normalizado)
+        if dto is None:
+            dto=SimpleNamespace(chassi=master.chassi_normalizado,modelo=master.modelo,placa=master.placa,cor=master.cor,
+                unidade=master.unidade_nome,condicao='Nova',situacao=master.status_comercial,faturado_para='',presenca='Cadastro mestre',
+                parcial=False,arquivo=master.origem_dado,atualizado_em=master.atualizado_em,emitido_em=None,ano=master.ano_modelo,
+                dias=master.dias_estoque,compra_centavos=None,custo_centavos=None,oferta_centavos=None,fornecedor='',titulo='',secao='',codigo='',negociacao='',possivel_transito=False)
+            result.append(dto)
+        dto.mestre_id=master.id; dto.modelo=master.modelo; dto.cor=master.cor; dto.unidade=master.unidade_nome
+        dto.dias=master.dias_estoque
+        dto.localizacao='Dentro da oficina' if master.localizacao.grupo=='OFICINA' else 'Em trânsito' if master.localizacao.grupo=='TRANSITO' else 'A confirmar' if master.localizacao.grupo=='A_CONFIRMAR' else master.localizacao.nome
+        dto.situacao={'DISPONÍVEL':'Disponível para venda','AGUARDANDO APROVAÇÃO':'Aguardando aprovação'}.get(master.status_comercial,master.status_comercial)
     for report in reports:
         if report['fonte'] == 'posicao':
             report['transito'] = [t for t in transito if t['arquivo'] == report['arquivo']]
     return sorted(result, key=lambda m: (m.modelo, m.chassi)), reports
 
 
+from inventario import mutacao
+
+
 @bp.post('/patio/localizacao')
+@mutacao('OPERADOR')
 def atualizar_localizacao():
-    chassi = request.form.get('chassi', '').strip().upper()
+    from inventario_service import permitir
+    permitir('OPERADOR')
+    from inventario_service import normalizar_chassi
+    try:
+        chassi=normalizar_chassi(request.form.get('chassi',''))
+    except ValueError:
+        abort(400,description='A localização exige chassi completo válido.')
     location = request.form.get('localizacao', '')
     if location not in ('Dentro da oficina', 'Em trânsito', 'A confirmar'):
         abort(400)
@@ -136,6 +179,12 @@ def atualizar_localizacao():
         db.session.add(row)
     row.localizacao = location
     row.atualizado_em = datetime.utcnow()
+    from inventario_models import MotoEstoque
+    from inventario_service import mover, obter_moto
+    master=db.session.scalar(db.select(MotoEstoque).where(MotoEstoque.chassi_normalizado==chassi))
+    if not master:
+        abort(400,description='Cadastre o chassi completo no estoque mestre antes de confirmar sua presença.')
+    mover(obter_moto(master.id),{'Dentro da oficina':'OFICINA','Em trânsito':'TRANSITO','A confirmar':'A_CONFIRMAR'}[location], 'Confirmação pela tela legada')
     db.session.commit()
     flash('Localização da moto atualizada.', 'success')
     return redirect(url_for('patio.listagem', **{k: request.form[k] for k in ('q', 'grupo', 'unidade', 'situacao', 'localizacao') if request.form.get(k) and k != 'localizacao'}))
@@ -156,7 +205,7 @@ def resumo_atrasadas(unidade=''):
     if unidade:
         query['unidade'] = unidade
     datas = [r['emitido_em'] for r in reports if r['fonte'] == 'oferta']
-    nota = ('Dias de estoque informados no relatório de ' + max(datas).strftime('%d/%m/%Y')
+    nota = ('Entrada do mestre baseada no relatório de ' + max(datas).strftime('%d/%m/%Y') + '; dias corridos de estoque. Presença física depende de conferência'
             if datas else 'Importe o relatório de veículos em oferta para atualizar a quantidade.')
     return dict(quantidade=quantidade, url=url_for('patio.listagem', **query), nota=nota)
 
@@ -197,6 +246,11 @@ def ler_relatorio(upload):
         data['chassi'] = data['chassi'].upper()
         if any(not data[key] for key in ('chassi', 'modelo', 'situacao')):
             raise ValueError(f'Linha {number}: preencha Chassi, Modelo e Situação.')
+        from inventario_service import normalizar_chassi
+        try:
+            data['chassi']=normalizar_chassi(data['chassi'])
+        except ValueError as error:
+            raise ValueError(f'Linha {number}: {error}') from None
         if data['chassi'] in seen:
             raise ValueError(f'Linha {number}: chassi repetido no relatório.')
         for key, limit in [('chassi',80),('modelo',200),('placa',30),('cor',100),('unidade',150),('condicao',100),('situacao',150),('faturado_para',200)]:
@@ -211,12 +265,16 @@ def ler_relatorio(upload):
 @bp.route('/patio', methods=['GET', 'POST'])
 def listagem():
     if request.method == 'POST':
+        from inventario_service import permitir
+        permitir('GESTOR')
         uploads = [u for u in request.files.getlist('arquivo') if u.filename]
         try:
             if not uploads:
                 raise ValueError('Selecione o relatório para importar.')
             if all(Path(u.filename).suffix.lower() == '.pdf' for u in uploads):
                 count = importar_pdfs(uploads)
+                from inventario_service import sincronizar_fontes
+                db.session.flush(); sincronizar_fontes()
                 db.session.commit()
                 flash(f'{count} relatório(s) importado(s). Arquivos já importados foram ignorados.', 'success')
                 return redirect(url_for('patio.listagem'))
@@ -234,6 +292,8 @@ def listagem():
                     setattr(moto, key, value)
                 moto.atualizado_em = now
                 moto.arquivo = Path(upload.filename.replace('\\', '/')).name[:255]
+            from inventario_service import sincronizar_fontes
+            db.session.flush(); sincronizar_fontes()
             db.session.commit()
             flash(f'Relatório importado: {len(rows)} moto(s) atualizada(s).', 'success')
         except Exception as exc:
@@ -263,4 +323,7 @@ def listagem():
     physical = [m for m in all_rows if not m.parcial and (not unit or m.unidade == unit)]
     counts.update(dentro=sum(m.localizacao == 'Dentro da oficina' for m in physical), transito=sum(m.localizacao == 'Em trânsito' for m in physical), confirmar=sum(m.localizacao == 'A confirmar' for m in physical))
     transito = [t for t in transito if (not unit or t['unidade'] == unit) and (not q or q in normalizar(t['chassi'] + ' ' + t['titulo']))]
-    return render_template('patio.html', page='patio', rows=rows, total=len(all_rows), counts=counts, reports=reports, transito=transito, situacoes=sorted({m.situacao for m in all_rows}), patio_unidades=sorted({m.unidade for m in all_rows if m.unidade}), ultima=max((m.atualizado_em for m in all_rows), default=None))
+    from inventario_service import indicadores, papel
+    from inventario_models import MotoEstoque
+    master_rows=db.session.scalars(db.select(MotoEstoque).where(MotoEstoque.unidade_nome==unit) if unit else db.select(MotoEstoque)).all()
+    return render_template('patio.html', page='patio', rows=rows, total=len(all_rows), counts=counts, reports=reports, transito=transito, indicadores=indicadores(master_rows), papel_estoque=papel(), situacoes=sorted({m.situacao for m in all_rows}), patio_unidades=sorted({m.unidade for m in all_rows if m.unidade}), ultima=max((m.atualizado_em for m in all_rows), default=None))

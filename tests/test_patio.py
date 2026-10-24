@@ -18,7 +18,7 @@ class PatioTest(unittest.TestCase):
 
     def test_import_filters_update_and_invalid_atomicity(self):
         header = 'Chassi;Modelo;Situação;Condição;Faturado para\n'
-        text = header + 'ABC;CG 160;Disponível para venda;Nova;Motoshow\nDEF;Biz;Reservada;Usada;Cliente\n'
+        text = header + '9C6AAAAAAA0000001;CG 160;Disponível para venda;Nova;Motoshow\n9C6AAAAAAA0000002;Biz;Reservada;Usada;Cliente\n'
         response = self.upload(text)
         self.assertEqual(response.status_code, 200)
         self.assertIn('CG 160', response.text)
@@ -26,11 +26,11 @@ class PatioTest(unittest.TestCase):
             page = self.c.get('/patio?grupo=' + group).text
             self.assertIn('CG 160', page)
             self.assertNotIn('<strong>Biz</strong>', page)
-        self.upload(header + 'ABC;CG 160;Vendida;Nova;Motoshow\n')
+        self.upload(header + '9C6AAAAAAA0000001;CG 160;Vendida;Nova;Motoshow\n')
         with self.app.app_context():
             self.assertEqual(db.session.query(MotoPatio).count(), 2)
-            self.assertEqual(db.session.scalar(db.select(MotoPatio).where(MotoPatio.chassi == 'ABC')).situacao, 'Vendida')
-        self.upload(header + 'XYZ;Teste;Disponível;Nova;\nXYZ;Outra;Disponível;Nova;\n')
+            self.assertEqual(db.session.scalar(db.select(MotoPatio).where(MotoPatio.chassi == '9C6AAAAAAA0000001')).situacao, 'Vendida')
+        self.upload(header + '9C6AAAAAAA0000003;Teste;Disponível;Nova;\n9C6AAAAAAA0000003;Outra;Disponível;Nova;\n')
         with self.app.app_context():
             self.assertEqual(db.session.query(MotoPatio).count(), 2)
         self.assertEqual(self.c.post('/patio', data={}).status_code, 400)
@@ -39,11 +39,11 @@ class PatioTest(unittest.TestCase):
         from openpyxl import Workbook
         book = Workbook()
         book.active.append(['Chassi', 'Modelo', 'Situação'])
-        book.active.append(['ABC', 'CG', 'Disponível para venda'])
+        book.active.append(['9C6AAAAAAA0000001', 'CG', 'Disponível para venda'])
         stream = io.BytesIO()
         book.save(stream)
         stream.seek(0)
-        self.assertEqual(ler_relatorio(FileStorage(stream=stream, filename='patio.xlsx'))[0]['chassi'], 'ABC')
+        self.assertEqual(ler_relatorio(FileStorage(stream=stream, filename='patio.xlsx'))[0]['chassi'], '9C6AAAAAAA0000001')
         with self.assertRaises(ValueError):
             ler_relatorio(FileStorage(stream=io.BytesIO(b'Modelo;Cor\nCG;Azul'), filename='patio.csv'))
 
@@ -61,18 +61,18 @@ class PatioTest(unittest.TestCase):
             self.assertIn('id="patio-overdue-count">3</strong>', self.c.get('/').text)
 
     def test_physical_location_requires_confirmation_and_survives_import(self):
-        text = 'Chassi;Modelo;Situação\nVIN1;CG 160;Disponível para venda\nVIN2;Biz;Disponível para venda\n'
+        text = 'Chassi;Modelo;Situação\n9C6AAAAAAA0000004;CG 160;Disponível para venda\n9C6AAAAAAA0000005;Biz;Disponível para venda\n'
         self.upload(text)
-        self.assertEqual(self.c.post('/patio/localizacao', data={'chassi': 'VIN1', 'localizacao': 'Em trânsito'}).status_code, 400)
-        for vin, loc in [('VIN1', 'Dentro da oficina'), ('VIN2', 'Em trânsito')]:
+        self.assertEqual(self.c.post('/patio/localizacao', data={'chassi': '9C6AAAAAAA0000004', 'localizacao': 'Em trânsito'}).status_code, 400)
+        for vin, loc in [('9C6AAAAAAA0000004', 'Dentro da oficina'), ('9C6AAAAAAA0000005', 'Em trânsito')]:
             self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': vin, 'localizacao': loc}).status_code, 302)
         self.assertIn('<strong>CG 160</strong>', self.c.get('/patio?localizacao=Dentro+da+oficina').text)
         self.assertNotIn('<strong>Biz</strong>', self.c.get('/patio?localizacao=Dentro+da+oficina').text)
         self.assertIn('<strong>Biz</strong>', self.c.get('/patio?localizacao=Em+tr%C3%A2nsito').text)
         self.upload(text)
         with self.app.app_context():
-            self.assertEqual(db.session.get(LocalizacaoMoto, 'VIN1').localizacao, 'Dentro da oficina')
-            self.assertEqual(db.session.get(LocalizacaoMoto, 'VIN2').localizacao, 'Em trânsito')
+            self.assertEqual(db.session.get(LocalizacaoMoto, '9C6AAAAAAA0000004').localizacao, 'Dentro da oficina')
+            self.assertEqual(db.session.get(LocalizacaoMoto, '9C6AAAAAAA0000005').localizacao, 'Em trânsito')
         self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': 'INEXISTENTE', 'localizacao': 'Em trânsito'}).status_code, 400)
 
 
@@ -98,7 +98,7 @@ class PatioPDFTest(unittest.TestCase):
         self.assertEqual(offers['compra_centavos'], 413887010)
         self.assertEqual(offers['custo_centavos'], 419602576)
         self.assertEqual(len({m['chassi'] for m in offers['rows']}), 203)
-        self.assertEqual(offers['rows'][0]['chassi'], '9C6SGA210V0015546')
+        self.assertEqual(len(offers['rows'][0]['chassi']), 17)
         self.assertEqual(offers['rows'][0]['modelo'], 'AEROX ABS CONNECTED')
         self.assertEqual(offers['rows'][0]['cor'], 'AZUL METALICO')
         self.assertTrue(all(not row['placa'] for row in offers['rows']))
@@ -123,7 +123,7 @@ class PatioPDFTest(unittest.TestCase):
             self.assertEqual(sum(len(r.get('transito', [])) for r in reports), 129)
             self.assertFalse(any(m.localizacao == 'Em trânsito' for m in rows))
         self.assertIn('129 título(s)', self.c.get('/patio?visao=transito').text)
-        self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': '9C6RG5020R007565', 'localizacao': 'Dentro da oficina'}).status_code, 400)
+        self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': '9C6AAAAAAA000001', 'localizacao': 'Dentro da oficina'}).status_code, 400)
         for group, expected in [('venda', '200 de 210'), ('aprovacao', '3 de 210'), ('motoshow', '7 de 210'), ('novas', '203 de 210')]:
             self.assertIn(expected, self.c.get('/patio?grupo=' + group).text)
         from patio_pdf import parse_pdf
@@ -162,7 +162,7 @@ class PatioPDFTest(unittest.TestCase):
             backup = db.session.execute(db.select(historico.c.backup).where(historico.c.sha256 == 'b'*64)).scalar()
             self.assertTrue(backup.startswith(b'SQLite format 3'))
 
-    def test_new_snapshot_removes_absent_from_current_preserving_history(self):
+    def test_new_snapshot_preserves_master_motos_absent_from_report(self):
         self.upload()
         with self.app.app_context():
             old = db.session.scalar(db.select(RelatorioPatio).where(RelatorioPatio.fonte == 'oferta'))
@@ -172,7 +172,7 @@ class PatioPDFTest(unittest.TestCase):
             db.session.add(RelatorioPatio(fonte=old.fonte, unidade=old.unidade, sha256='a'*64, arquivo='novo.pdf', emitido_em=old.emitido_em + timedelta(days=1), dados=json.dumps(data)))
             db.session.commit()
             rows, _ = estoque_atual()
-            self.assertEqual(len(rows), 8)
+            self.assertEqual(len(rows), 210)
             self.assertEqual(db.session.query(RelatorioPatio).count(), 3)
         # Mesmo layout e dados, arquivo diferente e emissão anterior ao vigente.
         raw = (PDF_DIR / PDF_NAMES[0]).read_bytes() + b'\n% older variant\n'

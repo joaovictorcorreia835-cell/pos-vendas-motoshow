@@ -31,12 +31,18 @@ def create_app(database=None):
     db.init_app(app)
     from patio import bp as patio_bp
     app.register_blueprint(patio_bp)
+    from inventario import bp as inventario_bp
+    app.register_blueprint(inventario_bp)
     from faturamento import bp as faturamento_bp
     app.register_blueprint(faturamento_bp)
     from pedidos import bp as pedidos_bp
     app.register_blueprint(pedidos_bp)
     with app.app_context():
+        from schema_inventario import preparar_backup
+        preparar_backup()
         db.create_all()
+        from schema_inventario import atualizar_schema as atualizar_schema_inventario
+        atualizar_schema_inventario()
         from schema_mensal import atualizar_schema_mensal
         atualizar_schema_mensal()
         if not db.session.get(Configuracao,1): db.session.add(Configuracao(id=1,unidade='Parauapebas')); db.session.commit()
@@ -47,6 +53,17 @@ def create_app(database=None):
         executar_pendente()
         from jobs_patio import executar_pendente as importar_patio_pendente
         importar_patio_pendente()
+        from inventario_service import sincronizar_fontes
+        from schema_inventario import finalizar
+        sincronizar_fontes()
+        finalizar()
+        db.session.commit()
+        if production:
+            from inventario_service import indicadores as indicadores_estoque
+            from schema_inventario import versoes, VERSAO
+            import json
+            check=db.session.execute(db.select(versoes.c.status,versoes.c.sha256).where(versoes.c.versao==VERSAO)).one()
+            print('INVENTARIO_PRONTO '+json.dumps(dict(migracao=check.status,backup_sha256=check.sha256,**indicadores_estoque())),flush=True)
     @app.get('/atualizacoes/backup/<digest>')
     def backup_relatorios(digest):
         from jobs_relatorios import historico

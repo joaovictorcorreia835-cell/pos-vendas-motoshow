@@ -30,7 +30,7 @@ def configure_auth(app):
         if request.endpoint in ['login','static','healthz']:
             return
         if not g.usuario:
-            if request.path.startswith('/api/'):
+            if request.path.startswith('/api/') or request.endpoint=='inventario.api_localizar':
                 return jsonify(error='Faça login para acessar o sistema.'),401
             if request.method!='GET':
                 abort(400,description='Faça login e recarregue o formulário.')

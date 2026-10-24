@@ -58,7 +58,7 @@ def aplicar_meses(payload, digest):
                 names = ', '.join('"' + t.name + '"' for t in db.metadata.sorted_tables)
                 db.session.execute(text('LOCK TABLE ' + names + ' IN SHARE ROW EXCLUSIVE MODE'))
             # Todos os registros anteriores devem permanecer idênticos, inclusive usuários e outubro.
-            before = {t.name: [tuple(r) for r in db.session.execute(select(t).order_by(t.c.id))] for t in db.metadata.sorted_tables}
+            before = {t.name: [tuple(r) for r in db.session.execute(select(t).order_by(*t.primary_key.columns))] for t in db.metadata.sorted_tables}
             backup = sqlite_snapshot(db.engine).getvalue()
             added = 0
             corrected = 0
@@ -97,7 +97,12 @@ def aplicar_meses(payload, digest):
             for table in db.metadata.sorted_tables:
                 old = before[table.name]
                 if old:
-                    actual = [tuple(r) for r in db.session.execute(select(table).where(table.c.id.in_([r[0] for r in old])).order_by(table.c.id))]
+                    from sqlalchemy import tuple_
+                    keys=list(table.primary_key.columns)
+                    positions=[list(table.columns.keys()).index(c.name) for c in keys]
+                    values=[tuple(r[i] for i in positions) for r in old]
+                    condition=keys[0].in_([v[0] for v in values]) if len(keys)==1 else tuple_(*keys).in_(values)
+                    actual = [tuple(r) for r in db.session.execute(select(table).where(condition).order_by(*keys))]
                     if actual != old:
                         raise ValueError('Registro anterior alterado.')
                 if table.name not in ('faturamento_mensal', 'faturamento_consultor'):
