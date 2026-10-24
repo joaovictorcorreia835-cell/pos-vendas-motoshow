@@ -2,7 +2,7 @@
 
 ## Situação da entrega
 
-Implementação validada localmente em 24/10/2026. Suíte completa: **153 executados, 153 aprovados, 0 falhas e 0 erros**. Publicado em produção em **24/10/2026**, com deploy `dep-dbedft0473hc7390gc00` confirmado como `live`. Migração `APLICADA`; 203 cadastros no mestre, 0 localizadas e 203 a confirmar, conforme o log real de inicialização. Backup lógico registrado antes da migração.
+Implementação validada localmente em 24/10/2026. Suíte completa: **153 executados, 153 aprovados, 0 falhas e 0 erros**. Publicado em produção em **24/10/2026**, com deploy `dep-dbedsie7bikc73b58t00` confirmado como `live`. Migração `APLICADA`; 203 cadastros no mestre, 0 localizadas e 203 a confirmar, conforme o log real de inicialização. Backup lógico registrado antes da migração. Após a revisão final, os 30 testes específicos de inventário passaram novamente e o serviço respondeu HTTP 200 em /healthz. Cancelamentos justificam as divergências pendentes e preservam seu histórico.
 
 O navegador conectado não estava disponível nesta sessão. Os templates e as rotas são verificados por testes; a conferência visual em desktop/celular permanece no checklist manual abaixo.
 
@@ -158,7 +158,7 @@ No estoque atual: ativas localizadas e sem divergência pendente / ativas espera
 
 ## Checklist manual completo
 
-Execute preferencialmente com motos de teste e uma unidade de teste, para não gerar movimentos fictícios no estoque real.
+Para simular divergências, use uma cópia local do banco ou ambiente de teste. Em produção, registre somente conferências e movimentações que ocorreram de fato. Na cópia de teste, prepare motos com localização PÁTIO antes de abrir o inventário, para testar a diferença entre o esperado e o encontrado.
 
 1. **Entrar:** use o mesmo usuário do sistema; confirme que CONSULTA não apresenta ações de escrita.
 2. **Abrir o pátio:** valide os indicadores do mestre e a separação das fontes financeiras.
@@ -189,3 +189,4 @@ Também foram compilados os 30 templates, verificados imports e integridade/FKs 
 - A validação visual em navegador/celular depende do checklist manual, pois não havia navegador conectado.
 - Câmera para QR/código de barras é integração futura; a API de busca e o fluxo por teclado estão preparados.
 - Em produção, a migração é executada na inicialização. O log `INVENTARIO_PRONTO` deve confirmar `APLICADA`, o hash do backup e os indicadores reais antes de considerar a publicação validada.
+
