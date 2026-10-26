@@ -272,17 +272,24 @@ def contagem(ident):
     query=select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==ident)
     if acesso.exclusivo():query=query.where(db.or_(InventarioMotoItem.moto_id.is_(None),InventarioMotoItem.moto_id.in_(acesso.escopo(select(MotoEstoque.id),MotoEstoque))))
     items=db.session.scalars(query.order_by(InventarioMotoItem.conferido_em.desc(),InventarioMotoItem.id)).all()
-    return render('estoque_contagem.html',inv=inv,resumo=svc.resumo_inventario(inv),items=items,match=match,q=q,duplicada=duplicate)
+    models={m.id:m.modelo for m in db.session.scalars(acesso.escopo(select(MotoEstoque),MotoEstoque).where(MotoEstoque.id.in_({i.moto_id for i in items if i.moto_id})))}
+    for item in items:item.modelo_atual=models.get(item.moto_id,item.snapshot.get('modelo',''))
+    return render('estoque_contagem.html',inv=inv,resumo=svc.resumo_inventario(inv),items=items,match=match,q=q,duplicada=duplicate,hoje=agora().date().isoformat())
 
 
 @bp.post('/inventarios/<int:ident>/conferir')
 @mutacao('OPERADOR')
 def conferir(ident):
     inv=svc.inventario_aberto(ident)
-    result=svc.conferir(inv,request.form.get('chassi'),request.form.get('localizacao'),request.form.get('corrigir')=='sim',request.form.get('observacao',''))
+    try:
+        result=svc.conferir(inv,request.form.get('chassi'),request.form.get('localizacao'),request.form.get('corrigir')=='sim',request.form.get('observacao',''),cadastro=dict(request.form))
+    except ValueError as error:
+        db.session.rollback();flash(str(error),'danger')
+        return redirect(url_for('inventario.contagem',ident=ident,**{k:request.form.get(k,'') for k in ('chassi','modelo','cor','data_entrada')})+'#scanner')
     if result['duplicada']:
         item=result['item']
         flash(f'MOTO JÁ CONFERIDA: {item.conferido_em:%d/%m/%Y %H:%M} por {item.conferido_por}, em {item.localizacao_encontrada}. A quantidade não foi incrementada.','warning')
+    elif result.get('cadastrada'):flash('Moto cadastrada e conferida. Estoque, localização e indicadores atualizados.','success')
     else:flash('Moto conferida. Próximo chassi.','success')
     return redirect(url_for('inventario.contagem',ident=ident)+'#scanner')
 

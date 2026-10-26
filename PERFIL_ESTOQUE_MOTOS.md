@@ -30,6 +30,10 @@ Backup anterior em `backups/perfil_estoque_antes_20261024_134238/oficina.db`. Co
 
 Se faltar uma unidade, o administrador pode cadastrá-la em `/patio/configuracao-estoque`. A vinculação exige uma unidade ativa. A lista de usuários permite ao administrador editar nome, perfil, unidade e situação. A conta principal e o próprio acesso do administrador não podem ser alterados por esse formulário. Alterações de acesso incrementam a versão da sessão e invalidam sessões anteriores. Não há alteração automática dos acessos existentes.
 
+## Cadastro na conferência
+
+Conforme atualização de 26/10/2026, o perfil pode cadastrar chassi ausente durante inventário ativo da própria unidade, informando modelo, cor e data de entrada. Pode também completar extras sem cadastro. O histórico é preservado e a pendência de cadastro resolvida na mesma transação. Consulte [CADASTRO_NA_CONFERENCIA.md](CADASTRO_NA_CONFERENCIA.md). Outras resoluções administrativas continuam com ADMIN/GESTOR.
+
 ## Regras operacionais
 
 - ESTOQUE_MOTOS vê e opera somente a unidade vinculada. Sem unidade ativa, o acesso operacional falha com 403.
@@ -37,7 +41,7 @@ Se faltar uma unidade, o administrador pode cadastrá-la em `/patio/configuracao
 - O backend utiliza uma lista explícita de endpoints permitidos; novas rotas não recebem acesso automaticamente. Não depende do menu para bloquear acessos.
 - Consultas, indicadores, busca/API, inventários, divergências, histórico, relatórios e exportações respeitam a unidade. Parâmetros para outra unidade são recusados; IDs de outra unidade também.
 - Pode iniciar inventário, conferir, movimentar, conferir em massa, registrar saída e iniciar transferência. O lote aceita até 100 chassis, valida duplicidade e unidade e é transacional: um erro desfaz o lote inteiro.
-- Só pode justificar/corrigir **LOCALIZAÇÃO DIVERGENTE** da própria unidade, com justificativa obrigatória. Extras, faltas, unidade, status, cadastro/vinculação e resoluções administrativas ficam com ADMIN/GESTOR.
+- Só pode justificar/corrigir **LOCALIZAÇÃO DIVERGENTE** da própria unidade, com justificativa obrigatória. Faltas, unidade, status, vinculação e outras resoluções administrativas ficam com ADMIN/GESTOR. O cadastro de extras pelo fluxo de conferência segue a regra específica acima.
 - Análise, encerramento/cancelamento de inventário, retorno/cancelamento de saída, alteração de chassi/cadastro e regras continuam ADMIN/GESTOR. Inventário encerrado e histórico continuam imutáveis para todos.
 - Saída exige destino, motivo e responsável. Registra login real autenticado, data/hora, chassi, localização anterior e dados da saída na auditoria existente.
 - Transferência mantém a moto na origem e em trânsito até o recebimento. A tela `/patio/recebimentos` mostra apenas transferências pendentes **destinadas** à unidade do usuário. É uma exceção explícita para recebimento, sem liberar ficha/estoque da origem. Após receber, a moto pertence à unidade de destino e deixa de ser acessível pelo usuário da origem. Transferência concluída não pode ser recebida novamente ou apagada por esse perfil.

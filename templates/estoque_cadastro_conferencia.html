@@ -1,0 +1,7 @@
+<fieldset class="panel"><legend>Cadastrar esta moto no estoque</legend>
+<p>Informe os dados da moto. O cadastro será criado em {{inv.unidade_nome}} e atualizado na localização selecionada abaixo.</p>
+<div class="settings-grid">
+<label>Modelo<input name="modelo" value="{{request.args.get('modelo','')}}" maxlength="200" required placeholder="Ex.: Factor 150 DX"></label>
+<label>Cor<input name="cor" value="{{request.args.get('cor','')}}" maxlength="100" required placeholder="Ex.: Preta"></label>
+<label>Data de entrada no estoque<input type="date" name="data_entrada" value="{{request.args.get('data_entrada','')}}" max="{{hoje}}" required></label>
+</div></fieldset>

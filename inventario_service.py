@@ -286,20 +286,24 @@ def resumo_inventario(inv):
     percentage=round(reconciled*100/inv.total_esperado,2) if inv.total_esperado else 0
     return dict(esperadas=inv.total_esperado,encontradas=sum(i.encontrado and i.esperado for i in items),
         nao_encontradas=sum(not i.encontrado for i in expected),extras=sum(i.encontrado and not i.esperado for i in items),
+        extras_sem_cadastro=sum(i.encontrado and not i.esperado and i.moto_id is None for i in items),
         localizacao_divergente=sum(d.tipo=='LOCALIZAÇÃO DIVERGENTE' for d in differences),pendentes=sum(not d.resolvido for d in differences),
         conciliacao=percentage,sem_divergencia=reconciled,status='SEM BASE' if not inv.total_esperado else 'CONCILIADO' if percentage==100 else 'ATENÇÃO' if percentage>=95 else 'DIVERGENTE')
 
 
-def conferir(inv,vin,destino,corrigir=False,observacao=''):
+def conferir(inv,vin,destino,corrigir=False,observacao='',cadastro=None):
     from estoque_acesso import verificar_unidade, verificar_moto
     verificar_unidade(inv.unidade_id)
+    if inv.status in ('CONCLUÍDO','CANCELADO'):
+        raise ValueError('Inventário encerrado não permite conferência ou cadastro.')
     vin=normalizar_chassi(vin); target=local(destino)
     item=db.session.scalar(select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==inv.id,InventarioMotoItem.chassi==vin).with_for_update())
     m=db.session.scalar(select(MotoEstoque).where(MotoEstoque.chassi_normalizado==vin).with_for_update())
     verificar_moto(m)
     if item is None and m:
         item=db.session.scalar(select(InventarioMotoItem).where(InventarioMotoItem.inventario_id==inv.id,InventarioMotoItem.moto_id==m.id).with_for_update())
-    if item and item.encontrado and not corrigir:
+    completar=m is None and cadastro is not None
+    if item and item.encontrado and not corrigir and not completar:
         return dict(duplicada=True,item=item)
     if corrigir and (not observacao.strip() or papel() not in ('ADMIN','GESTOR')):
         raise ValueError('Correção exige gestor e justificativa.')
@@ -307,6 +311,23 @@ def conferir(inv,vin,destino,corrigir=False,observacao=''):
         item=InventarioMotoItem(inventario_id=inv.id,chassi=vin,moto_id=m.id if m else None,esperado=False,
             snapshot=estado(m) if m else dict(modelo='Não cadastrada',unidade='Não prevista'),localizacao_esperada=m.localizacao.nome if m else 'Não prevista')
         db.session.add(item); db.session.flush()
+    cadastrada=False
+    if completar:
+        modelo=str(cadastro.get('modelo','')).strip()
+        cor=str(cadastro.get('cor','')).strip()
+        entrada=str(cadastro.get('data_entrada','')).strip()
+        if not modelo or not cor or not entrada:
+            raise ValueError('Para cadastrar esta moto, informe modelo, cor e data de entrada.')
+        if len(modelo)>200 or len(cor)>100:
+            raise ValueError('Modelo: até 200 caracteres; cor: até 100 caracteres.')
+        try:date.fromisoformat(entrada)
+        except ValueError:raise ValueError('Informe uma data de entrada válida.') from None
+        unit=db.session.get(UnidadeEstoque,inv.unidade_id)
+        if not unit or not unit.ativo:
+            raise ValueError('A unidade do inventário precisa estar ativa para cadastrar a moto.')
+        m=cadastrar(dict(chassi=vin,modelo=modelo,cor=cor,data_entrada=entrada,unidade=unit.nome),
+            'Cadastro durante inventário '+inv.codigo)
+        item.moto_id=m.id;cadastrada=True
     previous=dict(localizacao=item.localizacao_encontrada,encontrado=item.encontrado,conferido_por=item.conferido_por)
     item.encontrado=True; item.localizacao_encontrada=target.nome; item.conferido_em=agora(); item.conferido_por=ator()[1]
     if not item.esperado:
@@ -327,11 +348,21 @@ def conferir(inv,vin,destino,corrigir=False,observacao=''):
         auditar(m,'INVENTÁRIO / EXTRA',previous,observacao,inv.id,novo=dict(localizacao=target.nome,encontrado=True),chassi=vin)
     if inv.status=='ABERTO':
         inv.status='EM CONFERÊNCIA'
+    if cadastrada:
+        justification='Cadastro completado durante a conferência: modelo, cor e data de entrada informados.'
+        for d in db.session.scalars(select(DivergenciaMoto).where(DivergenciaMoto.item_id==item.id,DivergenciaMoto.tipo=='EXTRA')):
+            d.moto_id=m.id
+            if not d.resolvido:
+                d.resolvido=True;d.justificativa=justification;d.resolvido_por=ator()[1];d.resolvido_em=agora()
+        item.justificativa=justification;item.resolvido_por=ator()[1];item.resolvido_em=agora()
+        db.session.flush()
+        item.resolvido=not db.session.scalar(select(DivergenciaMoto.id).where(DivergenciaMoto.item_id==item.id,DivergenciaMoto.resolvido.is_(False)))
+        auditar(m,'CADASTRO NA CONFERÊNCIA',dict(cadastrada=False),justification,inv.id)
     for d in db.session.scalars(select(DivergenciaMoto).where(DivergenciaMoto.item_id==item.id,DivergenciaMoto.resolvido.is_(False))):
         if d.tipo in ('NÃO ENCONTRADA','SAÍDA NÃO CONFIRMADA'):
             d.resolvido=True; d.justificativa='Moto localizada em nova conferência'; d.resolvido_por=ator()[1]; d.resolvido_em=agora()
     db.session.flush()
-    return dict(duplicada=False,item=item)
+    return dict(duplicada=False,item=item,cadastrada=cadastrada)
 
 
 def analisar(inv):
