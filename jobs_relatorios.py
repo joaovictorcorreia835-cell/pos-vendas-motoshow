@@ -127,6 +127,9 @@ def executar_pendente():
         elif payload.get('kind')=='usuario_estoque':
             from jobs_usuarios import aplicar_usuario_estoque
             result=aplicar_usuario_estoque(payload,digest)
+        elif payload.get('kind')=='usuario_admin':
+            from jobs_usuarios import aplicar_usuario_admin
+            result=aplicar_usuario_admin(payload,digest)
         else:
             result=aplicar_lote(payload,digest)
         print('RELATORIOS_JOB_OK '+json.dumps(dict(lote=digest,**result)),flush=True)
