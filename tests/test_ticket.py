@@ -31,4 +31,15 @@ class TicketTest(unittest.TestCase):
   self.post(os='4',data='2026-10-10',status='Aberta',valor1='900')
   d=self.metric();self.assertEqual(d['quantidade'],2);self.assertEqual(d['total_mao_obra_centavos'],10000);self.assertEqual(d['mao_obra_centavos'],5000)
   d=self.metric('&unidade=Outra');self.assertEqual(d['mao_obra_centavos'],0)
+ def test_competencia_faturada_independe_da_entrada(self):
+  for number,entered,month,kind in [('1','2026-09-10','2026-10','Manutenção'),('2','2026-10-10','2026-09','Manutenção'),('3','2026-08-10','2026-10','Troca de óleo')]:
+   self.post(os=number,data=entered,status='Finalizada',tipo=kind,valor1='100')
+   with self.app.app_context():
+    p=db.session.scalar(db.select(Passagem).order_by(Passagem.id.desc()))
+    p.ordem.origem=OrigemOS(arquivo='teste.pdf',sha256='b'*64,pagina=1,dados={'competencia_faturamento':month})
+    db.session.commit()
+  d=self.metric();self.assertEqual(d['quantidade'],1)
+  self.assertEqual(d['total_mao_obra_centavos'],10000)
+  self.assertEqual(d['trocas_oleo_excluidas'],1)
+  self.assertEqual(self.metric('&unidade=Outra')['quantidade'],0)
 if __name__=='__main__':unittest.main()

@@ -12,6 +12,15 @@ def oil_change(p):
   return original.split(' - ',1)[0]=='tol' or original.startswith('troca de oleo')
  return False
 
+def faturada_no_periodo(p,start,end):
+ if not p.ordem or p.status!='Finalizada':return False
+ dados=p.ordem.origem.dados if p.ordem.origem else {}
+ competencia=dados.get('competencia_faturamento')
+ if competencia:
+  return start.strftime('%Y-%m')<=competencia<=end.strftime('%Y-%m')
+ return start<=p.data.date()<=end
+
+
 def ticket_medio(rows):
  finished=[p for p in rows if p.ordem and p.status=='Finalizada' and normal(p.tipo)!='balcao']
  excluded=[p for p in finished if oil_change(p)]

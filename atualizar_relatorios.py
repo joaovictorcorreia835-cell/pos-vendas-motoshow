@@ -19,6 +19,9 @@ def business(row):return {k:v for k,v in row.items() if k!='pagina'}
 
 def synchronize(documents,unit,folder,apply=False,backup_dir='backups',commit=True,criar_backup=True):
  folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)
+ for rows,summary in documents[:2]:
+  if summary.get('situacao')=='Faturada' and summary.get('competencia_faturamento'):
+   for row in rows:row['competencia_faturamento']=summary['competencia_faturamento']
  existing={o.numero:o for o in db.session.scalars(db.select(OrdemServico))}
  sales_existing={v.nota:v for v in db.session.scalars(db.select(VendaBalcao).where(VendaBalcao.unidade==unit,VendaBalcao.natureza=='Venda'))}
  plan=dict(os_novas=[],os_finalizadas=[],os_alteradas=[],vendas_novas=[],vendas_alteradas=[],devolucoes_ignoradas=0)

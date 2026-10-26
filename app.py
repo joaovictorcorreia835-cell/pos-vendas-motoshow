@@ -135,10 +135,11 @@ def create_app(database=None):
         if period=='anterior':
             end=today.replace(day=1)-timedelta(days=1); return end.replace(day=1),end
         return today,today
-    def records(args=None):
+    def records(args=None,por_entrada=True):
         args=request.args if args is None else args
         start,end=dates(args)
-        q=db.select(Passagem).options(*atendimentos()).where(Passagem.data>=datetime.combine(start,datetime.min.time()),Passagem.data<datetime.combine(end+timedelta(days=1),datetime.min.time()))
+        q=db.select(Passagem).options(*atendimentos())
+        if por_entrada:q=q.where(Passagem.data>=datetime.combine(start,datetime.min.time()),Passagem.data<datetime.combine(end+timedelta(days=1),datetime.min.time()))
         for key,col in [('tipo',Passagem.tipo),('status',Passagem.status),('unidade',Passagem.unidade),('consultor',Passagem.consultor_id),('mecanico',Passagem.mecanico_id)]:
             if args.get(key):
                 value=args[key]
@@ -206,7 +207,8 @@ def create_app(database=None):
         pending_finance=dict(os_centavos=sum(p.total for p in osrows),pedidos_centavos=pedidos_summary['total_centavos'])
         pending_finance['total_centavos']=pending_finance['os_centavos']+pending_finance['pedidos_centavos']
         from indicadores import ticket_medio,ticket_pedidos_faturados
-        ticket=ticket_medio(rows)
+        from indicadores import faturada_no_periodo
+        ticket=ticket_medio([p for p in records(args,por_entrada=False) if faturada_no_periodo(p,start,end)])
         from indicadores import resumo_prazos
         from pedidos import filtered as pedidos_filtered
         backlog_args=dict(args);backlog_args.update(inicio='1900-01-01',fim=date.today().isoformat())

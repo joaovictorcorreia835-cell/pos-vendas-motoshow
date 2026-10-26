@@ -71,6 +71,10 @@ def aplicar_lote(payload,digest):
             orders_before=[tuple(row) for row in db.session.execute(select(Pedido.__table__).order_by(Pedido.id))]
             backup=sqlite_snapshot(db.engine).getvalue()
             from atualizar_relatorios import synchronize
+            # A data de entrada/saída da OS não é a data fiscal. O relatório
+            # mensal informa a competência; não inventamos um dia de emissão.
+            if (end.replace(day=1)-start.replace(day=1)).days<32 and start.day==1 and (end.month==start.month or end.day==1):
+                docs[0][1]['competencia_faturamento']=start.strftime('%Y-%m')
             with tempfile.TemporaryDirectory() as folder:
                 plan=synchronize(docs,unit,folder,apply=True,backup_dir=folder,commit=False,criar_backup=False)
             absent=db.session.scalars(select(OrdemServico).join(Passagem).where(Passagem.unidade==unit,OrdemServico.numero.not_in(allowed))).all()

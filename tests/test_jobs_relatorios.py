@@ -39,6 +39,10 @@ class RelatoriosJobTest(unittest.TestCase):
    self.assertEqual(result['balcao_centavos'],3506224)
    self.assertFalse(aplicar_lote(self.payload,self.digest)['reaplicado'])
    self.assertEqual(db.session.query(OrdemServico).count(),358)
+   billed={r['os'] for r in self.payload['documents'][0][0]}
+   for order in db.session.scalars(db.select(OrdemServico)):
+    if order.numero in billed:
+     self.assertEqual(order.origem.dados['competencia_faturamento'],self.payload['sales_start'][:7])
    after=self.snapshot()
    for table in ['pedido','faturamento_mensal','faturamento_consultor','usuario']:self.assertEqual(before[table],after[table])
    data=db.session.execute(db.select(historico.c.backup).where(historico.c.sha256==self.digest)).scalar()
