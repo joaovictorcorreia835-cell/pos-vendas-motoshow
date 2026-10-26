@@ -123,8 +123,13 @@ def obter_moto(ident, revisao=None):
 
 def cadastrar(data, origem='Cadastro manual'):
     vin = normalizar_chassi(data.get('chassi'))
-    if db.session.scalar(select(MotoEstoque.id).where(MotoEstoque.chassi_normalizado == vin)):
+    existing=db.session.scalar(select(MotoEstoque).where(MotoEstoque.chassi_normalizado==vin).with_for_update())
+    archived=existing and not existing.ativo and not existing.saida_fisica_confirmada
+    if existing and not archived:
         raise ValueError('Chassi já cadastrado no estoque mestre.')
+    if archived:
+        from estoque_acesso import verificar_moto
+        verificar_moto(existing)
     model = data.get('modelo','').strip()
     if not model or len(model) > 200:
         raise ValueError('Informe o modelo (até 200 caracteres).')
@@ -132,8 +137,11 @@ def cadastrar(data, origem='Cadastro manual'):
     status = data.get('status_comercial') or 'DISPONÍVEL'
     if status not in COMERCIAIS:
         raise ValueError('Status comercial inválido.')
-    m = MotoEstoque(chassi=vin, chassi_normalizado=vin, modelo=model, unidade_id=unit.id,
-        unidade_nome=unit.nome, status_comercial=status, localizacao=local('A_CONFIRMAR'), origem_dado=origem)
+    before=estado(existing) if archived else None
+    m=existing if archived else MotoEstoque(chassi=vin,chassi_normalizado=vin)
+    m.modelo=model;m.unidade_id=unit.id;m.unidade_nome=unit.nome
+    m.status_comercial=status;m.localizacao=local('A_CONFIRMAR');m.origem_dado=origem
+    m.ativo=True;m.presenca_confirmada=False
     for key, size in [('cor',100),('versao',100),('ano_modelo',4),('ano_fabricacao',4),('numero_motor',100),('numero_nf',80),('placa',30),('observacao',10000)]:
         value = data.get(key,'') or ''
         if len(value) > size:
@@ -144,7 +152,7 @@ def cadastrar(data, origem='Cadastro manual'):
         if m.data_entrada > agora().date():
             raise ValueError('A data de entrada não pode estar no futuro.')
     db.session.add(m); db.session.flush()
-    auditar(m,'ENTRADA',observacao=origem)
+    auditar(m,'RECADASTRO' if archived else 'ENTRADA',before,observacao=origem)
     return m
 
 

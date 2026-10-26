@@ -116,6 +116,27 @@ def movimentacoes():
     return render('estoque_movimentacoes.html',rows=rows[:50],pagina=page,mais=len(rows)>50)
 
 
+@bp.post('/excluir-nao-confirmadas')
+@mutacao('ADMIN')
+def excluir_nao_confirmadas():
+    if request.form.get('confirmacao')!='EXCLUIR SEM CONFIRMACAO FISICA':
+        abort(400)
+    from deployment import sqlite_snapshot
+    from jobs_relatorios import historico
+    import hashlib
+    historico.create(db.session.connection(),checkfirst=True)
+    if db.engine.dialect.name=='postgresql':
+        db.session.execute(text('LOCK TABLE moto_estoque, transferencia_moto IN SHARE ROW EXCLUSIVE MODE'))
+    rows=db.session.scalars(select(MotoEstoque).where(MotoEstoque.ativo.is_(True),MotoEstoque.presenca_confirmada.is_(False),MotoEstoque.saida_fisica_confirmada.is_(False),MotoEstoque.id.not_in(select(TransferenciaMoto.pendente_moto).where(TransferenciaMoto.pendente_moto.is_not(None)))).with_for_update()).all()
+    backup=sqlite_snapshot(db.engine).getvalue()
+    for m in rows:
+        before=svc.estado(m);m.ativo=False
+        svc.auditar(m,'EXCLUSÃO DO ESTOQUE ATIVO',before,'Exclusão autorizada pelo titular: moto sem confirmação física. Cadastro manual poderá reativar este chassi.')
+    result=dict(excluidas=len(rows),confirmadas_preservadas=db.session.scalar(select(db.func.count()).select_from(MotoEstoque).where(MotoEstoque.ativo.is_(True),MotoEstoque.presenca_confirmada.is_(True))),backup_sha256=hashlib.sha256(backup).hexdigest())
+    db.session.execute(historico.insert().values(sha256=hashlib.sha256(secrets.token_bytes(32)).hexdigest(),backup=backup,resultado=dict(tipo='exclusao_nao_confirmadas',**result),criado_em=agora()))
+    return jsonify(result)
+
+
 @bp.route('/conferencia-massa',methods=['GET','POST'])
 def massa():
     if request.method=='POST':return conferir_massa()
