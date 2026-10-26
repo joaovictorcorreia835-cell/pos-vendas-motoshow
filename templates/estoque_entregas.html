@@ -1,0 +1,13 @@
+{% extends 'estoque_base.html' %}
+{% block estoque %}
+<div class="page-title"><div><h2>Entregas</h2><p>{{inicio.strftime('%d/%m/%Y')}} a {{fim.strftime('%d/%m/%Y')}}</p></div><strong class="page-total">{{total}} entrega(s)</strong></div>
+<form method="get" class="panel monthly-selector">
+<label>Data inicial<input type="date" name="inicio" value="{{inicio.isoformat()}}" required></label>
+<label>Data final<input type="date" name="fim" value="{{fim.isoformat()}}" required></label>
+<label>Unidade<select name="unidade"><option value="">Todas</option>{% for u in unidades_estoque %}<option value="{{u.nome}}" {{'selected' if request.args.get('unidade')==u.nome}}>{{u.nome}}</option>{% endfor %}</select></label>
+<button class="btn btn-primary">Filtrar</button><a class="btn btn-outline-info" href="{{url_for('inventario.entregas')}}">Hoje</a>
+</form>
+<section class="panel"><div class="table-scroll"><table><thead><tr><th>Data e hora</th><th>Chassi</th><th>Modelo / Cor</th><th>Unidade</th><th>Responsável</th></tr></thead><tbody>
+{% for e in rows %}<tr><td>{{e.data_hora.strftime('%d/%m/%Y %H:%M')}}</td><td><a href="{{url_for('inventario.ficha',ident=e.moto_id)}}">{{e.chassi}}</a></td><td>{{e.novo.get('modelo','')}}<small>{{e.novo.get('cor','')}}</small></td><td>{{e.novo.get('unidade','')}}</td><td>{{e.usuario_nome}}</td></tr>{% else %}<tr><td colspan="5">Nenhuma entrega no período selecionado.</td></tr>{% endfor %}
+</tbody></table></div></section>
+{% endblock %}

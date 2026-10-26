@@ -9,7 +9,7 @@ LEITURA = {
     'patio.listagem', 'inventario.mestre', 'inventario.ficha', 'inventario.localizar',
     'inventario.api_localizar', 'inventario.inventarios', 'inventario.contagem',
     'inventario.divergencias', 'inventario.pdv', 'inventario.relatorio',
-    'inventario.movimentacoes', 'inventario.recebimentos', 'inventario.massa',
+    'inventario.movimentacoes', 'inventario.recebimentos', 'inventario.massa', 'inventario.entregas',
     'minha_senha', 'logout',
 }
 ESCRITA = {

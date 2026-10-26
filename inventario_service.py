@@ -184,7 +184,7 @@ def mover(m, destino, observacao='', tipo='ALTERAÇÃO DE LOCALIZAÇÃO', invent
             db.session.add(DivergenciaMoto(moto_id=m.id,chassi=m.chassi_normalizado,tipo='NÃO ENCONTRADA',esperado=before['localizacao'],encontrado=target.nome,responsavel=ator()[1]))
 
 
-def saida(m, destino, motivo, responsavel, observacao=''):
+def saida(m, destino, motivo, responsavel, observacao='', entrega_cliente=False):
     from estoque_acesso import verificar_moto
     verificar_moto(m)
     if not all(str(v or '').strip() for v in (destino,motivo,responsavel)):
@@ -198,7 +198,15 @@ def saida(m, destino, motivo, responsavel, observacao=''):
     m.data_saida_fisica=agora(); m.usuario_saida=ator()[1]
     m.destino_saida=destino; m.motivo_saida=motivo; m.responsavel_saida=responsavel
     m.atualizado_em=agora()
-    db.session.flush(); auditar(m,'SAÍDA',before,observacao,novo=dict(estado(m),destino=destino,motivo=motivo,responsavel=responsavel))
+    db.session.flush(); auditar(m,'SAÍDA',before,observacao,novo=dict(estado(m),destino=destino,motivo=motivo,responsavel=responsavel,entrega_cliente=bool(entrega_cliente)))
+
+
+def entregas_periodo(inicio,fim,unidade_nome=''):
+    from estoque_acesso import exclusivo,unidade_usuario
+    query=select(MovimentacaoMoto).where(MovimentacaoMoto.tipo_movimentacao=='SAÍDA',MovimentacaoMoto.data_hora>=datetime.combine(inicio,datetime.min.time()),MovimentacaoMoto.data_hora<datetime.combine(fim+timedelta(days=1),datetime.min.time()))
+    if exclusivo():query=query.where(MovimentacaoMoto.unidade_origem==unidade_usuario().nome)
+    if unidade_nome:query=query.where(MovimentacaoMoto.unidade_origem==unidade_nome)
+    return [e for e in db.session.scalars(query.order_by(MovimentacaoMoto.data_hora.desc(),MovimentacaoMoto.id.desc())) if e.novo.get('entrega_cliente') is True]
 
 
 def retorno(m, destino, motivo):
@@ -555,7 +563,7 @@ def indicadores(rows=None):
     localizadas=sum(m.presenca_confirmada for m in active)
     counts=Counter(m.localizacao.grupo for m in active)
     reconciled=sum(m.presenca_confirmada and m.id not in pending for m in active)
-    return dict(total=len(active),localizadas=localizadas,a_confirmar=sum(m.data_ultima_confirmacao is None or m.localizacao.grupo=='A_CONFIRMAR' for m in active),
+    return dict(entregas_hoje=len(entregas_periodo(agora().date(),agora().date(),request.args.get('unidade','') if has_request_context() else '')),total=len(active),localizadas=localizadas,a_confirmar=sum(m.data_ultima_confirmacao is None or m.localizacao.grupo=='A_CONFIRMAR' for m in active),
         divergencias=sum(m.id in pending for m in active),por_local=dict(counts),por_codigo=dict(Counter(m.localizacao.codigo for m in active)),conciliacao=round(reconciled*100/len(active),2) if active else 0,
         saidas_hoje=sum(m.saida_fisica_confirmada and m.data_saida_fisica and m.data_saida_fisica.date()==agora().date() for m in rows))
 

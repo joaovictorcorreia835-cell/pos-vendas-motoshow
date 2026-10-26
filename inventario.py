@@ -227,7 +227,7 @@ def acao_moto(ident):
         svc.receber(m,request.form.get('localizacao'),note)
     else:
         if not (acesso.exclusivo() and action in ('saida','transferir')):svc.permitir('GESTOR')
-        if action=='saida':svc.saida(m,request.form.get('destino'),request.form.get('motivo'),request.form.get('responsavel'),note)
+        if action=='saida':svc.saida(m,request.form.get('destino'),request.form.get('motivo'),request.form.get('responsavel'),note,entrega_cliente=request.form.get('entrega_cliente')=='sim')
         elif action=='retorno':svc.retorno(m,request.form.get('localizacao'),note)
         elif action=='transferir':svc.transferir(m,request.form.get('destino_unidade'),note)
         elif action=='editar':
@@ -365,6 +365,19 @@ def resolver(ident):
 def pdv():
     rows=consulta(dict(request.args,localizacao='PDV'),somente_fisicas=True)
     return render('estoque_pdv.html',rows=rows,agora=agora())
+
+
+@bp.get('/entregas')
+def entregas():
+    today=agora().date()
+    try:
+        inicio=date.fromisoformat(request.args.get('inicio') or today.isoformat())
+        fim=date.fromisoformat(request.args.get('fim') or inicio.isoformat())
+        if fim<inicio or (fim-inicio).days>366:raise ValueError()
+    except ValueError:
+        abort(400,description='Selecione um período válido de até 367 dias.')
+    rows=svc.entregas_periodo(inicio,fim,request.args.get('unidade',''))
+    return render('estoque_entregas.html',rows=rows,total=len(rows),inicio=inicio,fim=fim)
 
 
 @bp.get('/relatorio-estoque')
