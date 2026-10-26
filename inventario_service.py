@@ -542,7 +542,7 @@ def sincronizar_fontes():
 
 def indicadores(rows=None):
     rows=rows if rows is not None else db.session.scalars(select(MotoEstoque).options(selectinload(MotoEstoque.localizacao))).all()
-    active=[m for m in rows if m.ativo and not m.saida_fisica_confirmada]
+    active=[m for m in rows if m.ativo and not m.saida_fisica_confirmada and m.presenca_confirmada]
     pending={d.moto_id for d in db.session.scalars(select(DivergenciaMoto).where(DivergenciaMoto.resolvido.is_(False)))}
     localizadas=sum(m.presenca_confirmada for m in active)
     counts=Counter(m.localizacao.grupo for m in active)

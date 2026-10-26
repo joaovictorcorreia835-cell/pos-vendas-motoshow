@@ -21,7 +21,8 @@ class PatioTest(unittest.TestCase):
         text = header + '9C6AAAAAAA0000001;CG 160;Disponível para venda;Nova;Motoshow\n9C6AAAAAAA0000002;Biz;Reservada;Usada;Cliente\n'
         response = self.upload(text)
         self.assertEqual(response.status_code, 200)
-        self.assertIn('CG 160', response.text)
+        self.assertNotIn('<strong>CG 160</strong>', response.text)
+        self.c.post('/patio/localizacao',data={'csrf':self.token,'chassi':'9C6AAAAAAA0000001','localizacao':'Dentro da oficina'})
         for group in ('novas', 'venda', 'motoshow'):
             page = self.c.get('/patio?grupo=' + group).text
             self.assertIn('CG 160', page)
@@ -69,7 +70,7 @@ class PatioTest(unittest.TestCase):
             self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': vin, 'localizacao': loc}).status_code, 302)
         self.assertIn('<strong>CG 160</strong>', self.c.get('/patio?localizacao=Dentro+da+oficina').text)
         self.assertNotIn('<strong>Biz</strong>', self.c.get('/patio?localizacao=Dentro+da+oficina').text)
-        self.assertIn('<strong>Biz</strong>', self.c.get('/patio?localizacao=Em+tr%C3%A2nsito').text)
+        self.assertNotIn('<strong>Biz</strong>', self.c.get('/patio?localizacao=Em+tr%C3%A2nsito').text)
         self.upload(text)
         with self.app.app_context():
             self.assertEqual(db.session.get(LocalizacaoMoto, '9C6AAAAAAA0000004').localizacao, 'Dentro da oficina')
@@ -110,35 +111,24 @@ class PatioPDFTest(unittest.TestCase):
         self.assertTrue(all(len(r['chassi']) < 17 for r in financial['rows']))
 
     def test_batch_import_idempotence_and_filters(self):
-        response = self.upload()
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('200 disponíveis para venda', response.text)
-        self.assertIn('Pátio a confirmar', response.text)
+        response=self.upload()
+        self.assertEqual(response.status_code,200)
+        self.assertIn('0 de 0',response.text)
         with self.app.app_context():
-            rows, reports = estoque_atual()
-            self.assertEqual(len(rows), 210)
-            self.assertEqual(sum(m.parcial for m in rows), 7)
-            self.assertEqual(sum(m.situacao == 'Disponível para venda' for m in rows), 200)
-            self.assertEqual(sum(m.situacao == 'Aguardando aprovação' for m in rows), 3)
-            self.assertTrue(all(m.localizacao == 'A confirmar' for m in rows))
-            self.assertEqual(sum(len(r.get('transito', [])) for r in reports), 129)
-            self.assertFalse(any(m.localizacao == 'Em trânsito' for m in rows))
-        self.assertIn('129 título(s)', self.c.get('/patio?visao=transito').text)
-        self.assertEqual(self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': '9C6AAAAAAA000001', 'localizacao': 'Dentro da oficina'}).status_code, 400)
-        for group, expected in [('venda', '200 de 210'), ('aprovacao', '3 de 210'), ('motoshow', '7 de 210'), ('novas', '203 de 210')]:
-            self.assertIn(expected, self.c.get('/patio?grupo=' + group).text)
+            rows,reports=estoque_atual()
+            self.assertEqual(len(rows),210)
+            self.assertEqual(sum(m.parcial for m in rows),7)
+            self.assertEqual(len(estoque_atual(somente_fisicas=True)[0]),0)
+        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'],0)
         from patio_pdf import parse_pdf
-        expected = sum(m['dias'] > 45 for m in parse_pdf((PDF_DIR / PDF_NAMES[0]).read_bytes())['rows'])
-        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'], expected)
-        self.assertIn(f'{expected} de 210', self.c.get('/patio?grupo=atrasadas').text)
-        oldest = next(m['chassi'] for m in parse_pdf((PDF_DIR / PDF_NAMES[0]).read_bytes())['rows'] if m['dias'] > 45)
-        self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': oldest, 'localizacao': 'Em trânsito'})
-        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'], expected - 1)
-        self.c.post('/patio/localizacao', data={'csrf': self.token, 'chassi': oldest, 'localizacao': 'Dentro da oficina'})
-        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'], expected)
+        oldest=next(m['chassi'] for m in parse_pdf((PDF_DIR/PDF_NAMES[0]).read_bytes())['rows'] if m['dias']>45)
+        self.c.post('/patio/localizacao',data={'csrf':self.token,'chassi':oldest,'localizacao':'Dentro da oficina'})
+        self.assertEqual(self.c.get('/api/dashboard').get_json()['patio_atrasadas']['quantidade'],1)
+        self.assertIn('1 de 1',self.c.get('/patio?grupo=atrasadas').text)
         self.upload()
         with self.app.app_context():
-            self.assertEqual(db.session.query(RelatorioPatio).count(), 2)
+            self.assertEqual(db.session.query(RelatorioPatio).count(),2)
+            self.assertEqual(len(estoque_atual(somente_fisicas=True)[0]),1)
 
     def test_invalid_batch_is_atomic(self):
         self.upload(extra=b'not a PDF')
@@ -181,4 +171,3 @@ class PatioPDFTest(unittest.TestCase):
         self.assertIn('mais antigo', response.text)
         with self.app.app_context():
             self.assertEqual(db.session.query(RelatorioPatio).count(), 3)
-

@@ -53,9 +53,11 @@ def contexto():
         destinos_estoque=db.session.scalars(select(UnidadeEstoque).where(UnidadeEstoque.ativo.is_(True)).order_by(UnidadeEstoque.nome)).all())
 
 
-def consulta(args=None):
+def consulta(args=None,somente_fisicas=False):
     args=request.args if args is None else args
     query=acesso.escopo(select(MotoEstoque),MotoEstoque).options(selectinload(MotoEstoque.localizacao))
+    if somente_fisicas and args.get('situacao')!='saidas':
+        query=query.where(db.or_(MotoEstoque.presenca_confirmada.is_(True),MotoEstoque.saida_fisica_confirmada.is_(True)) if args.get('situacao')=='todas' else MotoEstoque.presenca_confirmada.is_(True))
     if args.get('situacao')=='saidas':
         query=query.where(MotoEstoque.saida_fisica_confirmada.is_(True))
     elif args.get('situacao')!='todas':
@@ -95,7 +97,7 @@ def render(view,**kwargs):
 
 
 def dashboard_estoque():
-    rows=consulta()
+    rows=consulta(somente_fisicas=True)
     last=db.session.scalar(acesso.escopo(select(InventarioMoto),InventarioMoto).order_by(InventarioMoto.id.desc()).limit(1))
     return render('estoque_dashboard.html',indicadores=svc.indicadores(rows),
         atrasadas=sum(m.dias_estoque is not None and m.dias_estoque>45 and m.localizacao.grupo!='TRANSITO' for m in rows),
@@ -160,7 +162,7 @@ def receber_transferencia(ident):
 
 @bp.get('/mestre')
 def mestre():
-    rows=consulta(); page=max(1,request.args.get('pagina',1,type=int)); per_page=30
+    rows=consulta(somente_fisicas=True); page=max(1,request.args.get('pagina',1,type=int)); per_page=30
     pending={d.moto_id for d in db.session.scalars(select(DivergenciaMoto).where(DivergenciaMoto.resolvido.is_(False)))}
     policy=db.session.get(PoliticaEstoque,1)
     return render('estoque_mestre.html',rows=rows[(page-1)*per_page:page*per_page],total=len(rows),pagina=page,paginas=max(1,(len(rows)+per_page-1)//per_page),
@@ -340,13 +342,13 @@ def resolver(ident):
 
 @bp.get('/pdv')
 def pdv():
-    rows=consulta(dict(request.args,localizacao='PDV'))
+    rows=consulta(dict(request.args,localizacao='PDV'),somente_fisicas=True)
     return render('estoque_pdv.html',rows=rows,agora=agora())
 
 
 @bp.get('/relatorio-estoque')
 def relatorio():
-    rows=consulta(); stats=svc.indicadores(rows); policy=db.session.get(PoliticaEstoque,1)
+    rows=consulta(somente_fisicas=True); stats=svc.indicadores(rows); policy=db.session.get(PoliticaEstoque,1)
     groups={label:dict(Counter(getter(m) for m in rows)) for label,getter in [('Unidade',lambda m:m.unidade_nome),('Localização',lambda m:m.localizacao.nome),('Modelo',lambda m:m.modelo),('Status comercial',lambda m:m.status_comercial)]}
     totals=dict(faturadas_presentes=sum(m.presenca_confirmada and not m.saida_fisica_confirmada and m.status_comercial=='FATURADA' for m in rows),
         vendidas_presentes=sum(m.presenca_confirmada and not m.saida_fisica_confirmada and m.status_comercial=='VENDIDA' for m in rows),

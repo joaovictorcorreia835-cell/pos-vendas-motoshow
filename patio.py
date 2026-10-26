@@ -69,7 +69,7 @@ def importar_pdfs(uploads):
     return count
 
 
-def estoque_atual():
+def estoque_atual(somente_fisicas=False):
     snapshots = {}
     for source in db.session.scalars(db.select(RelatorioPatio).order_by(RelatorioPatio.emitido_em.desc(), RelatorioPatio.id.desc())):
         snapshots.setdefault((source.fonte, source.unidade), source)
@@ -148,6 +148,9 @@ def estoque_atual():
         dto.dias=master.dias_estoque
         dto.localizacao='Dentro da oficina' if master.localizacao.grupo=='OFICINA' else 'Em trânsito' if master.localizacao.grupo=='TRANSITO' else 'A confirmar' if master.localizacao.grupo=='A_CONFIRMAR' else master.localizacao.nome
         dto.situacao={'DISPONÍVEL':'Disponível para venda','AGUARDANDO APROVAÇÃO':'Aguardando aprovação'}.get(master.status_comercial,master.status_comercial)
+    if somente_fisicas:
+        confirmed={m.id for m in masters if m.ativo and not m.saida_fisica_confirmada and m.presenca_confirmada}
+        result=[m for m in result if getattr(m,'mestre_id',None) in confirmed]
     for report in reports:
         if report['fonte'] == 'posicao':
             report['transito'] = [t for t in transito if t['arquivo'] == report['arquivo']]
@@ -199,14 +202,14 @@ def atrasada(moto):
 
 
 def resumo_atrasadas(unidade=''):
-    rows, reports = estoque_atual()
+    rows, reports = estoque_atual(somente_fisicas=True)
     quantidade = sum(atrasada(m) for m in rows if not unidade or m.unidade == unidade)
     query = dict(grupo='atrasadas')
     if unidade:
         query['unidade'] = unidade
     datas = [r['emitido_em'] for r in reports if r['fonte'] == 'oferta']
-    nota = ('Entrada do mestre baseada no relatório de ' + max(datas).strftime('%d/%m/%Y') + '; dias corridos de estoque. Presença física depende de conferência'
-            if datas else 'Importe o relatório de veículos em oferta para atualizar a quantidade.')
+    nota = ('Entrada do mestre baseada no relatório de ' + max(datas).strftime('%d/%m/%Y') + '; dias corridos de estoque. Somente motos com presença física confirmada'
+            if datas else 'Somente motos com presença física confirmada e mais de 45 dias de estoque.')
     return dict(quantidade=quantidade, url=url_for('patio.listagem', **query), nota=nota)
 
 
@@ -304,7 +307,7 @@ def listagem():
             db.session.rollback()
             flash(str(exc) if isinstance(exc, ValueError) else 'Não foi possível importar. Confira o formato do relatório.', 'danger')
         return redirect(url_for('patio.listagem'))
-    all_rows, reports = estoque_atual()
+    all_rows, reports = estoque_atual(somente_fisicas=True)
     transito = [t for report in reports for t in report.get('transito', [])]
     q = normalizar(request.args.get('q', ''))
     def matches(m):
