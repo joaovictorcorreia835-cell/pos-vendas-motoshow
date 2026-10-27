@@ -10,10 +10,13 @@ window.desenharGraficoOficina = function(totais,evolucao) {
  const dialog=document.getElementById('oficina-patio-dialog');
  const abrirPatio=()=>{if(dialog&&!dialog.open)dialog.showModal();};
  document.querySelectorAll('[data-oficina-patio]').forEach(elemento=>elemento.addEventListener('click',abrirPatio));
+ const dialogEntregues=document.getElementById('oficina-entregues-dialog');
+ const abrirEntregues=()=>{if(dialogEntregues&&!dialogEntregues.open)dialogEntregues.showModal();};
+ document.querySelectorAll('[data-oficina-entregues]').forEach(elemento=>elemento.addEventListener('click',abrirEntregues));
  const destino=document.getElementById('grafico-oficina-destinos');
  if(!destino)return;
  const destinos=[totais.final,totais.patio,totais.entregas,totais.outras];
  const total=destinos.reduce((a,b)=>a+b,0);
  const centro={id:'totalCentro',afterDraw(chart){const {ctx,chartArea}=chart;const x=(chartArea.left+chartArea.right)/2,y=(chartArea.top+chartArea.bottom)/2;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#f0f7fc';ctx.font='700 36px sans-serif';ctx.fillText(String(total),x,y-10);ctx.fillStyle='#a6b9c9';ctx.font='12px sans-serif';ctx.fillText('total de motos',x,y+21);ctx.restore();}};
- new Chart(destino,{type:'doughnut',data:{labels:total?['Na oficina','Pátio disponível','Entregues ao cliente','Outras saídas']:['Sem registros'],datasets:[{data:total?destinos:[1],backgroundColor:total?cores:['#213744'],borderColor:'#0a1b27',borderWidth:4,borderRadius:6,hoverOffset:5}]},plugins:[centro],options:{responsive:true,maintainAspectRatio:false,cutout:'78%',onClick:(event,elements)=>{if(elements[0]?.index===1)abrirPatio();},onHover:(event,elements,chart)=>{chart.canvas.style.cursor=elements[0]?.index===1?'pointer':'default';},plugins:{legend:{display:false},tooltip:{...tooltip,enabled:!!total}}}});
+ new Chart(destino,{type:'doughnut',data:{labels:total?['Na oficina','Pátio disponível','Entregues ao cliente','Outras saídas']:['Sem registros'],datasets:[{data:total?destinos:[1],backgroundColor:total?cores:['#213744'],borderColor:'#0a1b27',borderWidth:4,borderRadius:6,hoverOffset:5}]},plugins:[centro],options:{responsive:true,maintainAspectRatio:false,cutout:'78%',onClick:(event,elements)=>{if(elements[0]?.index===1)abrirPatio();else if(elements[0]?.index===2)abrirEntregues();},onHover:(event,elements,chart)=>{chart.canvas.style.cursor=[1,2].includes(elements[0]?.index)?'pointer':'default';},plugins:{legend:{display:false},tooltip:{...tooltip,enabled:!!total}}}});
 };
