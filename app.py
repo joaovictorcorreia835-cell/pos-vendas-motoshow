@@ -37,6 +37,8 @@ def create_app(database=None):
     app.register_blueprint(faturamento_bp)
     from pedidos import bp as pedidos_bp
     app.register_blueprint(pedidos_bp)
+    from importacao_balcao import bp as importacao_balcao_bp
+    app.register_blueprint(importacao_balcao_bp)
     with app.app_context():
         from schema_inventario import preparar_backup
         preparar_backup()
@@ -440,3 +442,4 @@ if __name__=='__main__':
         finally: probe.close()
     print(f'Controle de Oficina Motoshow: http://localhost:{port}')
     app.run(host='127.0.0.1',port=port,debug=False)
+
