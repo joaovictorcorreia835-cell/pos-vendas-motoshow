@@ -65,3 +65,19 @@ class AtualizacaoBalcaoTest(unittest.TestCase):
             sessao.update(usuario_id=ident, usuario_versao=1)
         self.assertEqual(self.enviar().status_code, 403)
         self.assertEqual(self.c.post('/atualizacoes/balcao').status_code, 400)
+
+    def test_lote_nao_exclui_os_presente_nos_arquivos(self):
+        self.admin()
+        with patch('importar_os_pdf.read_pdf', side_effect=[
+            ([{'os':'1'}], {'situacao':'Faturada'}),
+            ([{'os':'2'}], {'situacao':'Aberta'})]), patch('pedidos.read_html',
+                return_value=([{'numero':'3'}], {})):
+            response = self.c.post('/atualizacoes/pos-vendas', data=dict(csrf=self.token,
+                competencia='2026-10', excluir_os='["1"]',
+                faturadas=(io.BytesIO(b'%PDF'), 'faturadas.pdf'),
+                abertas=(io.BytesIO(b'%PDF'), 'abertas.pdf'),
+                pedidos=(io.BytesIO(b'<html>'), 'pedidos.htm')), content_type='multipart/form-data')
+        self.assertEqual(response.status_code, 409)
+        self.assertIn('presentes', response.json['error'])
+        with self.app.app_context():
+            self.assertEqual(db.session.query(VendaBalcao).count(), 0)
