@@ -1,0 +1,9 @@
+<script src="{{url_for('static',filename='vendor/chart.umd.min.js')}}"></script>
+<script>
+const dias={{dados.dias|tojson}};
+new Chart(document.getElementById('grafico-oficina'),{type:'bar',data:{labels:dias.map(d=>d.data),datasets:[
+{type:'line',label:'Motos na oficina',data:dias.map(d=>d.oficina),borderColor:'#46b9ff',backgroundColor:'#46b9ff',tension:0.15,order:0},
+{label:'Disponíveis no Pátio',data:dias.map(d=>d.patio),backgroundColor:'#3ac48d'},
+{label:'Entregues ao cliente',data:dias.map(d=>d.entregas),backgroundColor:'#f5b942'}
+]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{legend:{labels:{color:'#aebed0'}}},scales:{y:{beginAtZero:true,ticks:{precision:0,color:'#aebed0'}},x:{ticks:{color:'#aebed0',maxTicksLimit:12}}}}});
+</script>

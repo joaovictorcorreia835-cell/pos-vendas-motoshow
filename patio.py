@@ -4,7 +4,7 @@ import io
 import hashlib
 import json
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -333,4 +333,8 @@ def listagem():
     from inventario_service import indicadores, papel
     from inventario_models import MotoEstoque
     master_rows=db.session.scalars(db.select(MotoEstoque).where(MotoEstoque.unidade_nome==unit) if unit else db.select(MotoEstoque)).all()
-    return render_template('patio.html', page='patio', patio_atrasadas=resumo_atrasadas(unit), rows=rows, total=len(all_rows), counts=counts, reports=reports, transito=transito, indicadores=indicadores(master_rows), papel_estoque=papel(), situacoes=sorted({m.situacao for m in all_rows}), patio_unidades=sorted({m.unidade for m in all_rows if m.unidade}), ultima=max((m.atualizado_em for m in all_rows), default=None))
+    from inventario_service import acompanhamento_oficina
+    from inventario_models import agora
+    hoje=agora().date()
+    oficina_dados=acompanhamento_oficina(hoje-timedelta(days=29),hoje,unit)
+    return render_template('patio.html', page='patio', oficina_dados=oficina_dados, patio_atrasadas=resumo_atrasadas(unit), rows=rows, total=len(all_rows), counts=counts, reports=reports, transito=transito, indicadores=indicadores(master_rows), papel_estoque=papel(), situacoes=sorted({m.situacao for m in all_rows}), patio_unidades=sorted({m.unidade for m in all_rows if m.unidade}), ultima=max((m.atualizado_em for m in all_rows), default=None))

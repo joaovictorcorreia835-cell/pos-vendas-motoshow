@@ -2,5 +2,8 @@
 <div class="page-title"><div><h2>Estoque de Motos — {{config.unidade}}</h2><p>Controle físico exclusivo da sua unidade</p></div></div>
 {% include 'estoque_cards.html' %}
 <section class="panel"><div class="estoque-cards"><a class="deadline-card atrasado" href="{{url_for('inventario.mestre',dias=45,excluir_transito='sim')}}"><span>Motos +45 dias</span><strong>{{atrasadas}}</strong><small>Dias em estoque; exclui trânsito confirmado</small></a><div class="deadline-card"><span>Último inventário</span><strong>{{ultimo.codigo if ultimo else 'Nenhum'}}</strong><small>{{ultimo.status if ultimo else 'Inicie a primeira contagem'}} • {{ultimo.iniciado_em if ultimo else ''}}</small>{% if ultimo %}<a href="{{url_for('inventario.contagem',ident=ultimo.id)}}">Consultar contagem</a>{% endif %}</div><div class="deadline-card"><span>Conciliação do último inventário</span><strong>{{('%.2f'|format(resumo_ultimo.conciliacao))~'%' if resumo_ultimo else 'Sem base'}}</strong><small>{{resumo_ultimo.status if resumo_ultimo else 'Nenhum inventário'}}{% if ultimo and not ultimo.encerrado_em %} • Contagem em andamento{% endif %}</small></div></div></section>
+{% include 'estoque_oficina_resumo.html' %}
 <section class="panel"><a class="btn btn-primary" href="{{url_for('inventario.localizar')}}">Buscar chassi / conferir presença</a> <a class="btn btn-outline-info" href="{{url_for('inventario.inventarios')}}">Iniciar ou conferir inventário</a> <a class="btn btn-outline-info" href="{{url_for('inventario.mestre',localizacao='TRANSITO')}}">Motos em trânsito</a></section>
 {% endblock %}
+
+{% block scripts %}{% with dados=oficina_dados %}{% include 'estoque_oficina_script.html' %}{% endwith %}{% endblock %}

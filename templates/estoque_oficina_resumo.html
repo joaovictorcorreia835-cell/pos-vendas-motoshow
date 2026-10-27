@@ -1,0 +1,7 @@
+<section class="panel" id="oficina-acompanhamento">
+<div class="page-title"><div><h2>Motos novas em oficina</h2><p>Últimos 30 dias • entradas, saldo e saídas da oficina</p></div><a class="btn btn-outline-info" href="{{url_for('inventario.oficina',unidade=request.args.get('unidade',''))}}">Alterar período / ver detalhes</a></div>
+<div class="estoque-cards">
+{% for label,value in [('Na oficina no início',oficina_dados.inicial),('Entradas',oficina_dados.entradas),('Disponíveis no Pátio',oficina_dados.patio),('Entregues ao cliente',oficina_dados.entregas),('Na oficina agora',oficina_dados.atual)] %}<div class="deadline-card"><span>{{label}}</span><strong>{{value}}</strong></div>{% endfor %}
+</div>
+<div style="height:360px;margin-top:20px"><canvas id="grafico-oficina" role="img" aria-label="Quantidade diária de motos novas em oficina e saídas para Pátio disponível e entrega ao cliente"></canvas></div>
+</section>

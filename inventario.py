@@ -99,7 +99,9 @@ def render(view,**kwargs):
 def dashboard_estoque():
     rows=consulta(somente_fisicas=True)
     last=db.session.scalar(acesso.escopo(select(InventarioMoto),InventarioMoto).order_by(InventarioMoto.id.desc()).limit(1))
-    return render('estoque_dashboard.html',indicadores=svc.indicadores(rows),
+    from datetime import timedelta
+    hoje=agora().date()
+    return render('estoque_dashboard.html',oficina_dados=svc.acompanhamento_oficina(hoje-timedelta(days=29),hoje,request.args.get('unidade','')),indicadores=svc.indicadores(rows),
         atrasadas=sum(m.dias_estoque is not None and m.dias_estoque>45 and m.localizacao.grupo!='TRANSITO' for m in rows),
         ultimo=last,resumo_ultimo=svc.resumo_inventario(last) if last else None)
 
