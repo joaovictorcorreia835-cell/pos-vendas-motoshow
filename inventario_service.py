@@ -596,6 +596,7 @@ def acompanhamento_oficina(inicio, fim, unidade_nome=''):
     ).order_by(MovimentacaoMoto.data_hora, MovimentacaoMoto.id)).all()
     changes = Counter(); patio = Counter(); entregas = Counter(); entradas = Counter(); outras = Counter()
     transicoes = []
+    liberadas_patio = []
     for e in events:
         # O retorno ja registra a transicao; o cancelamento e uma segunda auditoria.
         if e.tipo_movimentacao == 'CANCELAMENTO DE SA'+chr(205)+'DA':
@@ -614,6 +615,8 @@ def acompanhamento_oficina(inicio, fim, unidade_nome=''):
             elif (e.novo.get('grupo') == 'PATIO' and e.novo.get('presenca')
                   and not e.novo.get('saida') and e.novo.get('status') == 'DISPONÍVEL'):
                 patio[day] += 1
+                if day <= fim:
+                    liberadas_patio.append(dict(chassi=e.chassi,modelo=e.novo.get('modelo') or e.anterior.get('modelo') or '',moto_id=e.moto_id,data=e.data_hora.strftime('%d/%m/%Y %H:%M'),unidade=e.unidade_origem))
             else:
                 outras[day] += 1
     saldo = atual - sum(changes.values())
@@ -637,6 +640,6 @@ def acompanhamento_oficina(inicio, fim, unidade_nome=''):
                 oficina=corrente, detalhe=evento.observacao or evento.tipo_movimentacao))
     if not evolucao:
         evolucao = [dict(rotulo='Saldo no período', oficina=saldo, detalhe='Sem saídas da oficina no período')]
-    return dict(dias=dias, evolucao=evolucao, inicial=inicial, final=saldo, atual=atual,
+    return dict(liberadas_patio=liberadas_patio, dias=dias, evolucao=evolucao, inicial=inicial, final=saldo, atual=atual,
         entradas=sum(d['entradas'] for d in dias), patio=sum(d['patio'] for d in dias),
         entregas=sum(d['entregas'] for d in dias), outras=sum(d['outras'] for d in dias))
