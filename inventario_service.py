@@ -595,13 +595,17 @@ def acompanhamento_oficina(inicio, fim, unidade_nome=''):
         MovimentacaoMoto.data_hora >= datetime.combine(inicio, datetime.min.time())
     ).order_by(MovimentacaoMoto.data_hora, MovimentacaoMoto.id)).all()
     changes = Counter(); patio = Counter(); entregas = Counter(); entradas = Counter(); outras = Counter()
+    transicoes = []
     for e in events:
         # O retorno ja registra a transicao; o cancelamento e uma segunda auditoria.
         if e.tipo_movimentacao == 'CANCELAMENTO DE SA'+chr(205)+'DA':
             continue
         before, after = presente(e.anterior), presente(e.novo)
         day = e.data_hora.date()
-        changes[day] += int(after) - int(before)
+        delta = int(after) - int(before)
+        changes[day] += delta
+        if delta and day <= fim:
+            transicoes.append((e, delta))
         if after and not before:
             entradas[day] += 1
         if before and not after:
@@ -621,6 +625,18 @@ def acompanhamento_oficina(inicio, fim, unidade_nome=''):
         dias.append(dict(data=day.strftime('%d/%m/%Y'), oficina=saldo,
             entradas=entradas[day], patio=patio[day], entregas=entregas[day], outras=outras[day]))
         day += timedelta(days=1)
-    return dict(dias=dias, inicial=inicial, final=saldo, atual=atual,
+    corrente = inicial
+    evolucao = []
+    for evento, delta in transicoes:
+        if delta < 0 and not evolucao:
+            evolucao.append(dict(rotulo='Antes das saídas', oficina=corrente,
+                detalhe='Saldo antes da primeira saída do período'))
+        corrente += delta
+        if evolucao:
+            evolucao.append(dict(rotulo=evento.data_hora.strftime('%d/%m %H:%M'),
+                oficina=corrente, detalhe=evento.observacao or evento.tipo_movimentacao))
+    if not evolucao:
+        evolucao = [dict(rotulo='Saldo no período', oficina=saldo, detalhe='Sem saídas da oficina no período')]
+    return dict(dias=dias, evolucao=evolucao, inicial=inicial, final=saldo, atual=atual,
         entradas=sum(d['entradas'] for d in dias), patio=sum(d['patio'] for d in dias),
         entregas=sum(d['entregas'] for d in dias), outras=sum(d['outras'] for d in dias))

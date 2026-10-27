@@ -94,6 +94,7 @@ class InventarioTest(unittest.TestCase):
             data=svc.acompanhamento_oficina(hoje,hoje)
             self.assertEqual(data['final'],2)
             self.assertEqual(data['entradas'],5)
+            self.assertEqual([p['oficina'] for p in data['evolucao']],[4,3,2,1,2])
             self.assertEqual(data['entregas'],1)
             self.assertEqual(svc.acompanhamento_oficina(hoje,hoje,'Outra unidade')['final'],0)
         self.assertEqual(self.c.get('/patio/oficina').status_code,200)
