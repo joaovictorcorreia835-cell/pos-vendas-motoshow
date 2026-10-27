@@ -1,26 +1,9 @@
 <script src="{{url_for('static',filename='vendor/chart.umd.min.js')}}"></script>
+<script src="{{url_for('static',filename='js/oficina_grafico.js',v=2)}}"></script>
 <script>
 (() => {
 const dias={{dados.dias|tojson}};
 const totais={{dict(final=dados.final,patio=dados.patio,entregas=dados.entregas,outras=dados.outras)|tojson}};
-const cores={azul:'#5eb5ff',verde:'#45ddb0',violeta:'#b59aff',cinza:'#71879a',texto:'#a6b9c9'};
-const primeiro=dias.findIndex(d=>d.oficina||d.entradas||d.patio||d.entregas||d.outras);
-const visiveis=primeiro>0?dias.slice(Math.max(0,primeiro-1)):dias;
-const canvas=document.getElementById('grafico-oficina');
-const gradient=canvas.getContext('2d').createLinearGradient(0,0,0,300);
-gradient.addColorStop(0,'rgba(94,181,255,.28)');gradient.addColorStop(1,'rgba(94,181,255,0)');
-const tooltip={backgroundColor:'#102431',titleColor:'#f0f7fc',bodyColor:'#c5d7e5',borderColor:'#294659',borderWidth:1,padding:14,cornerRadius:10,boxPadding:6,usePointStyle:true};
-new Chart(canvas,{type:'bar',data:{labels:visiveis.map(d=>d.data),datasets:[
-{type:'line',label:'Na oficina',data:visiveis.map(d=>d.oficina),borderColor:cores.azul,backgroundColor:gradient,fill:true,borderWidth:3,tension:.25,pointRadius:visiveis.length>14?2:4,pointHoverRadius:7,pointBackgroundColor:cores.azul,pointBorderColor:'#0a1c29',pointBorderWidth:2,order:0},
-{label:'Pátio disponível',data:visiveis.map(d=>d.patio),backgroundColor:cores.verde,borderRadius:5,maxBarThickness:22},
-{label:'Entregues ao cliente',data:visiveis.map(d=>d.entregas),backgroundColor:cores.violeta,borderRadius:5,maxBarThickness:22}
-]},options:{responsive:true,maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{tooltip,legend:{position:'bottom',align:'start',labels:{color:cores.texto,usePointStyle:true,pointStyle:'circle',boxWidth:7,boxHeight:7,padding:22,font:{size:12}}}},scales:{y:{beginAtZero:true,grace:'15%',border:{display:false},grid:{color:'rgba(137,169,192,.09)',drawTicks:false},ticks:{precision:0,color:cores.texto,padding:12,maxTicksLimit:6}},x:{border:{display:false},grid:{display:false},ticks:{color:cores.texto,maxTicksLimit:7,maxRotation:0,padding:12,callback:function(value){return this.getLabelForValue(value).slice(0,5)}}}}}});
-const destino=document.getElementById('grafico-oficina-destinos');
-if(destino){
- const valores=[totais.final,totais.patio,totais.entregas,totais.outras];
- const total=valores.reduce((a,b)=>a+b,0);
- const centro={id:'saldoCentro',afterDraw(chart){const {ctx,chartArea}=chart;const x=(chartArea.left+chartArea.right)/2;const y=(chartArea.top+chartArea.bottom)/2;ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#f0f7fc';ctx.font='700 36px sans-serif';ctx.fillText(String(totais.final),x,y-10);ctx.fillStyle=cores.texto;ctx.font='12px sans-serif';ctx.fillText('na oficina',x,y+21);ctx.restore();}};
- new Chart(destino,{type:'doughnut',data:{labels:total?['Na oficina','Pátio disponível','Entregues ao cliente','Outras saídas']:['Sem movimentação'],datasets:[{data:total?valores:[1],backgroundColor:total?[cores.azul,cores.verde,cores.violeta,cores.cinza]:['#213744'],borderColor:'#0a1b27',borderWidth:4,borderRadius:6,hoverOffset:5}]},plugins:[centro],options:{responsive:true,maintainAspectRatio:false,cutout:'78%',plugins:{legend:{display:false},tooltip:{...tooltip,enabled:!!total}}}});
-}
+window.desenharGraficoOficina(totais);
 })();
 </script>
