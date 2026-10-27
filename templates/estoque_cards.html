@@ -4,3 +4,5 @@
 <a class="deadline-card" href="{{url_for('inventario.entregas',unidade=request.args.get('unidade',''))}}"><span>Entregas hoje</span><strong>{{indicadores.entregas_hoje}}</strong><small>Saídas físicas para o cliente</small></a>
 <div class="deadline-card {{'atrasado' if indicadores.conciliacao<95 else 'atencao' if indicadores.conciliacao<100 else 'estoque-conciliado'}}"><span>Conciliação do estoque atual</span><strong>{{'%.2f'|format(indicadores.conciliacao)|replace('.',',')}}%</strong><small>{{'SEM BASE' if not indicadores.total else 'CONCILIADO' if indicadores.conciliacao==100 else 'ATENÇÃO' if indicadores.conciliacao>=95 else 'DIVERGENTE'}} • localizadas sem pendência / esperadas</small></div>
 </div><p class="monthly-note">Faturamento e venda não confirmam saída. Somente motos com presença física confirmada entram nos totais; motos apenas importadas do relatório ficam fora.</p></section>
+
+<p><a class="btn btn-outline-info" href="{{url_for('inventario.oficina',unidade=request.args.get('unidade',''))}}">Gráfico das motos novas em oficina</a></p>

@@ -38,6 +38,10 @@ def atualizar_schema():
     # Compatibilidade aditiva com bancos que já receberam uma revisão inicial.
     with db.engine.begin() as con:
         inspector=inspect(con)
+        columns = {c['name'] for c in inspector.get_columns('moto_estoque')}
+        for name, sql_type in [('oficina_os_orcamento', 'VARCHAR(80)'), ('oficina_observacao', 'TEXT'), ('oficina_previsao_entrega', 'DATE')]:
+            if name not in columns:
+                con.execute(text(f'ALTER TABLE moto_estoque ADD COLUMN {name} {sql_type}'))
         if 'unidade_aberta_id' not in {c['name'] for c in inspector.get_columns('inventario_moto')}:
             con.execute(text('ALTER TABLE inventario_moto ADD COLUMN unidade_aberta_id INTEGER REFERENCES unidade_estoque(id)'))
         unique=inspector.get_unique_constraints('inventario_moto')+inspector.get_indexes('inventario_moto')

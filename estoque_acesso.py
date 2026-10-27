@@ -6,7 +6,7 @@ from inventario_models import UnidadeEstoque, MotoEstoque, InventarioMoto, Diver
 
 PERFIS = ('ADMIN', 'GESTOR', 'OPERADOR', 'ESTOQUE_MOTOS')
 LEITURA = {
-    'patio.listagem', 'inventario.mestre', 'inventario.ficha', 'inventario.localizar',
+    'inventario.oficina', 'patio.listagem', 'inventario.mestre', 'inventario.ficha', 'inventario.localizar',
     'inventario.api_localizar', 'inventario.inventarios', 'inventario.contagem',
     'inventario.divergencias', 'inventario.pdv', 'inventario.relatorio',
     'inventario.movimentacoes', 'inventario.recebimentos', 'inventario.massa', 'inventario.entregas',

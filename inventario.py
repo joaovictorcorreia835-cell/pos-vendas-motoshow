@@ -221,7 +221,24 @@ def ficha(ident):
 def acao_moto(ident):
     m=svc.obter_moto(ident,request.form.get('revisao'))
     action=request.form.get('acao'); note=request.form.get('observacao','').strip()
-    if action in ('mover','conferir'):
+    if action=='oficina':
+        if m.localizacao.grupo!='OFICINA':
+            raise ValueError('As informações da oficina só podem ser editadas para motos em oficina.')
+        number=request.form.get('oficina_os_orcamento','').strip()
+        observation=request.form.get('oficina_observacao','').strip()
+        if len(number)>80 or len(observation)>10000:
+            raise ValueError('Número da OS/orçamento: até 80 caracteres. Observação: até 10000 caracteres.')
+        delivery=request.form.get('oficina_previsao_entrega','').strip()
+        try:
+            delivery=date.fromisoformat(delivery) if delivery else None
+        except ValueError:
+            raise ValueError('Informe uma previsão de entrega válida.')
+        before=svc.estado(m)
+        m.oficina_os_orcamento=number
+        m.oficina_observacao=observation
+        m.oficina_previsao_entrega=delivery
+        svc.auditar(m,'INFORMAÇÕES DA OFICINA',before,'Atualização dos dados opcionais da oficina')
+    elif action in ('mover','conferir'):
         svc.mover(m,request.form.get('localizacao'),note,'CONFERÊNCIA RÁPIDA' if action=='conferir' else 'ALTERAÇÃO DE LOCALIZAÇÃO')
     elif action=='receber':
         svc.receber(m,request.form.get('localizacao'),note)
@@ -447,3 +464,18 @@ def backup_migracao():
     svc.permitir('ADMIN')
     from schema_inventario import backup_logico
     return send_file(io.BytesIO(zlib.decompress(backup_logico())),as_attachment=True,download_name='fontes_patio_antes_inventario.json',mimetype='application/json')
+
+
+@bp.get('/oficina')
+def oficina():
+    from datetime import timedelta
+    hoje=agora().date()
+    try:
+        inicio=date.fromisoformat(request.args.get('inicio') or (hoje-timedelta(days=29)).isoformat())
+        fim=date.fromisoformat(request.args.get('fim') or hoje.isoformat())
+    except ValueError:
+        abort(400, description='Datas invalidas.')
+    if fim<inicio or fim>hoje or (fim-inicio).days>366:
+        abort(400, description='Selecione ate 367 dias, sem datas futuras.')
+    dados=svc.acompanhamento_oficina(inicio,fim,request.args.get('unidade',''))
+    return render('estoque_oficina.html',dados=dados,inicio=inicio,fim=fim)

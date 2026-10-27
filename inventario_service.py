@@ -91,6 +91,8 @@ def estado(m):
         grupo=m.localizacao.grupo, status=m.status_comercial, presenca=m.presenca_confirmada,
         saida=m.saida_fisica_confirmada, ativo=m.ativo, revisao=m.revisao, versao=m.versao,
         ano_modelo=m.ano_modelo,ano_fabricacao=m.ano_fabricacao,numero_motor=m.numero_motor,numero_nf=m.numero_nf,
+        oficina_os_orcamento=m.oficina_os_orcamento, oficina_observacao=m.oficina_observacao,
+        oficina_previsao_entrega=m.oficina_previsao_entrega.isoformat() if m.oficina_previsao_entrega else None,
         data_entrada=m.data_entrada.isoformat() if m.data_entrada else None,
         ultima_confirmacao=m.data_ultima_confirmacao.isoformat() if m.data_ultima_confirmacao else None,
         usuario_confirmacao=m.usuario_ultima_confirmacao,origem=m.origem_dado,observacao=m.observacao,
@@ -573,3 +575,52 @@ def conferencia_status(m,policy):
         return 'NUNCA CONFERIDA'
     days=(agora().date()-m.data_ultima_confirmacao.date()).days
     return 'CONFERIDA HOJE' if days==0 else 'CONFERIDA RECENTEMENTE' if days<=policy.recente_dias else 'CONFERÊNCIA VENCIDA' if days>=policy.vencida_dias else 'CONFERÊNCIA A RENOVAR'
+
+
+def acompanhamento_oficina(inicio, fim, unidade_nome=''):
+    from estoque_acesso import exclusivo, unidade_usuario, escopo
+    if exclusivo():
+        unidade_nome = unidade_usuario().nome
+    def presente(state):
+        return bool(state.get('grupo') == 'OFICINA' and state.get('presenca')
+            and state.get('ativo', True) and not state.get('saida')
+            and (not unidade_nome or state.get('unidade') == unidade_nome))
+    query = escopo(select(MotoEstoque), MotoEstoque).where(
+        MotoEstoque.ativo.is_(True), MotoEstoque.presenca_confirmada.is_(True),
+        MotoEstoque.saida_fisica_confirmada.is_(False))
+    if unidade_nome:
+        query = query.where(MotoEstoque.unidade_nome == unidade_nome)
+    atual = sum(m.localizacao.grupo == 'OFICINA' for m in db.session.scalars(query))
+    events = db.session.scalars(select(MovimentacaoMoto).where(
+        MovimentacaoMoto.data_hora >= datetime.combine(inicio, datetime.min.time())
+    ).order_by(MovimentacaoMoto.data_hora, MovimentacaoMoto.id)).all()
+    changes = Counter(); patio = Counter(); entregas = Counter(); entradas = Counter(); outras = Counter()
+    for e in events:
+        # O retorno ja registra a transicao; o cancelamento e uma segunda auditoria.
+        if e.tipo_movimentacao == 'CANCELAMENTO DE SA'+chr(205)+'DA':
+            continue
+        before, after = presente(e.anterior), presente(e.novo)
+        day = e.data_hora.date()
+        changes[day] += int(after) - int(before)
+        if after and not before:
+            entradas[day] += 1
+        if before and not after:
+            if e.novo.get('saida') and e.novo.get('entrega_cliente') is True:
+                entregas[day] += 1
+            elif (e.novo.get('grupo') == 'PATIO' and e.novo.get('presenca')
+                  and not e.novo.get('saida') and e.novo.get('status') == 'DISPONÍVEL'):
+                patio[day] += 1
+            else:
+                outras[day] += 1
+    saldo = atual - sum(changes.values())
+    inicial = saldo
+    dias = []
+    day = inicio
+    while day <= fim:
+        saldo += changes[day]
+        dias.append(dict(data=day.strftime('%d/%m/%Y'), oficina=saldo,
+            entradas=entradas[day], patio=patio[day], entregas=entregas[day], outras=outras[day]))
+        day += timedelta(days=1)
+    return dict(dias=dias, inicial=inicial, final=saldo, atual=atual,
+        entradas=sum(d['entradas'] for d in dias), patio=sum(d['patio'] for d in dias),
+        entregas=sum(d['entregas'] for d in dias), outras=sum(d['outras'] for d in dias))

@@ -52,6 +52,53 @@ class InventarioTest(unittest.TestCase):
             if location:svc.mover(m,location,'Preparação do teste')
             db.session.commit();return m.id
 
+    def test_informacoes_opcionais_oficina(self):
+        ident=self.moto(location='OFICINA')
+        path=f'/patio/motos/{ident}/acao'
+        response=self.post(path,acao='oficina',oficina_os_orcamento='OS-123 / ORC-456',
+            oficina_observacao='Aguardando peca',oficina_previsao_entrega='2026-11-10')
+        self.assertEqual(response.status_code,200)
+        self.assertIn('OS-123 / ORC-456',response.text)
+        with self.app.app_context():
+            m=db.session.get(MotoEstoque,ident)
+            self.assertEqual(m.oficina_previsao_entrega.isoformat(),'2026-11-10')
+            event=db.session.scalar(select(MovimentacaoMoto).where(MovimentacaoMoto.moto_id==ident).order_by(MovimentacaoMoto.id.desc()))
+            self.assertEqual(event.novo['oficina_observacao'],'Aguardando peca')
+        self.assertIn('OS-123 / ORC-456',self.c.get('/patio/mestre?localizacao=OFICINA').text)
+        self.post(path,acao='oficina',oficina_os_orcamento='Outra',oficina_previsao_entrega='invalida')
+        with self.app.app_context():
+            self.assertEqual(db.session.get(MotoEstoque,ident).oficina_os_orcamento,'OS-123 / ORC-456')
+        self.post(path,acao='oficina')
+        with self.app.app_context():
+            m=db.session.get(MotoEstoque,ident)
+            self.assertEqual(m.oficina_os_orcamento,'')
+            self.assertEqual(m.oficina_observacao,'')
+            self.assertIsNone(m.oficina_previsao_entrega)
+        other=self.moto(n=2,location='PATIO')
+        self.post(f'/patio/motos/{other}/acao',acao='oficina',oficina_os_orcamento='Recusada')
+        with self.app.app_context():
+            self.assertFalse(db.session.get(MotoEstoque,other).oficina_os_orcamento)
+
+    def test_acompanhamento_oficina_saldos_destinos_e_retornos(self):
+        ids=[self.moto(n=n,location='OFICINA') for n in range(1,5)]
+        with self.app.app_context():
+            svc.mover(svc.obter_moto(ids[0]),'PATIO','Liberada')
+            svc.saida(svc.obter_moto(ids[1]),'Cliente','Entrega','Responsavel',entrega_cliente=True)
+            svc.mover(svc.obter_moto(ids[2]),'GALPAO','Outro destino')
+            db.session.commit()
+            hoje=agora().date()
+            data=svc.acompanhamento_oficina(hoje,hoje)
+            self.assertEqual((data['inicial'],data['entradas'],data['patio'],data['entregas'],data['outras'],data['final']),(0,4,1,1,1,1))
+            svc.retorno(svc.obter_moto(ids[1]),'OFICINA','Retorno cliente')
+            db.session.commit()
+            data=svc.acompanhamento_oficina(hoje,hoje)
+            self.assertEqual(data['final'],2)
+            self.assertEqual(data['entradas'],5)
+            self.assertEqual(data['entregas'],1)
+            self.assertEqual(svc.acompanhamento_oficina(hoje,hoje,'Outra unidade')['final'],0)
+        self.assertEqual(self.c.get('/patio/oficina').status_code,200)
+        self.assertEqual(self.c.get('/patio/oficina?inicio=2026-10-10&fim=2026-10-01').status_code,400)
+
     def iniciar(self):
         with self.app.app_context():
             unit=svc.unidade('Parauapebas'); inv=svc.abrir_inventario(unit.id,'Inventário teste',True)
