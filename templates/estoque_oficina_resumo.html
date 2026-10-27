@@ -1,7 +1,10 @@
-<section class="panel" id="oficina-acompanhamento">
-<div class="page-title"><div><h2>Motos novas em oficina</h2><p>Últimos 30 dias • entradas, saldo e saídas da oficina</p></div><a class="btn btn-outline-info" href="{{url_for('inventario.oficina',unidade=request.args.get('unidade',''))}}">Alterar período / ver detalhes</a></div>
-<div class="estoque-cards">
-{% for label,value in [('Na oficina no início',oficina_dados.inicial),('Entradas',oficina_dados.entradas),('Disponíveis no Pátio',oficina_dados.patio),('Entregues ao cliente',oficina_dados.entregas),('Na oficina agora',oficina_dados.atual)] %}<div class="deadline-card"><span>{{label}}</span><strong>{{value}}</strong></div>{% endfor %}
+<link rel="stylesheet" href="{{url_for('static',filename='css/oficina_grafico.css',v=1)}}">
+<section class="panel oficina-painel" id="oficina-acompanhamento">
+<div class="page-title"><div><h2>Motos novas em oficina</h2><p>{{periodo_oficina or 'Últimos 30 dias'}} • entradas, saldo e saídas da oficina</p></div><a class="btn btn-outline-info" href="{{url_for('inventario.oficina',unidade=request.args.get('unidade',''))}}">Alterar período / ver detalhes</a></div>
+<div class="oficina-metricas">
+{% for label,value,cor,nota in [('Na oficina',oficina_dados.final,'azul','Saldo ao final do período'),('Liberadas para o Pátio',oficina_dados.patio,'verde','Disponíveis para venda'),('Entregues ao cliente',oficina_dados.entregas,'violeta','Saídas físicas confirmadas')] %}<div class="oficina-metrica {{cor}}"><span>{{label}}</span><strong>{{value}}</strong><small>{{nota}}</small></div>{% endfor %}
 </div>
-<div style="height:360px;margin-top:20px"><canvas id="grafico-oficina" role="img" aria-label="Quantidade diária de motos novas em oficina e saídas para Pátio disponível e entrega ao cliente"></canvas></div>
+<div class="oficina-visuais"><div><div class="oficina-chart-title"><h3>Evolução da oficina</h3><span>Saldo por dia</span></div><div class="oficina-linha"><canvas id="grafico-oficina" role="img" aria-label="Quantidade diária de motos novas em oficina e saídas para Pátio disponível e entrega ao cliente"></canvas></div></div>
+<div class="oficina-distribuicao"><div class="oficina-chart-title"><h3>Saldo e saídas</h3><span>No período</span></div><div class="oficina-rosca"><canvas id="grafico-oficina-destinos" role="img" aria-label="Saldo na oficina e saídas por destino"></canvas></div><div class="oficina-legenda">{% for label,value,cor in [('Na oficina',oficina_dados.final,'azul'),('Pátio disponível',oficina_dados.patio,'verde'),('Entregues',oficina_dados.entregas,'violeta')] %}<span><i class="oficina-dot {{cor}}"></i>{{label}}<b>{{value}}</b></span>{% endfor %}{% if oficina_dados.outras %}<span><i class="oficina-dot cinza"></i>Outras saídas<b>{{oficina_dados.outras}}</b></span>{% endif %}</div></div></div>
+<div class="oficina-rodape"><span><b>{{oficina_dados.inicial}}</b> no início + <b>{{oficina_dados.entradas}}</b> entradas e retornos − <b>{{oficina_dados.patio+oficina_dados.entregas+oficina_dados.outras}}</b> saídas = <b>{{oficina_dados.final}}</b> na oficina</span><small>Somente motos do estoque com presença confirmada</small></div>
 </section>
