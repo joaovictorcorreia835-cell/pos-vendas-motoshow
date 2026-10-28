@@ -1,0 +1,9 @@
+<link rel="stylesheet" href="/static/css/motoshow_ai.css?v=1">
+<section class="panel motoshow-ai" id="perguntar" aria-labelledby="ai-title">
+  <div class="ai-heading"><div><span class="ai-eyebrow">MOTOSHOW AI</span><h2 id="ai-title">Assistente Inteligente do Pós-Vendas</h2><p>Pergunte sobre seus indicadores, oficina, peças, estoque e resultados.</p></div><span class="ai-status" id="ai-status">● Verificando conexão</span></div>
+  <p class="ai-privacy">Consulta somente leitura. Período e filtros da Central são aplicados; atalhos explícitos como “hoje” e “meu mês” ajustam o período da pergunta. Não envie credenciais ou dados pessoais.</p>
+  <div class="ai-suggestions" aria-label="Sugestões de perguntas">{% for q in ['Como está meu mês?','Vou bater a meta?','Quais OS precisam de atenção?','Faça uma análise da Curva ABC.','Onde existem oportunidades?','Me dê um resumo executivo.'] %}<button class="btn btn-outline-info" type="button" data-ai-question="{{q}}">{{q}}</button>{% endfor %}</div>
+  <div id="ai-history" class="ai-history" role="log" aria-live="polite" aria-relevant="additions"><p class="muted" id="ai-empty">Escolha uma sugestão ou faça sua pergunta. O histórico fica disponível durante esta sessão.</p></div>
+  <form id="ai-form" method="post" action="/central-inteligencia/ai/perguntar"><input type="hidden" name="csrf" value="{{csrf}}"><label class="ai-label" for="ai-question">Sua pergunta</label><textarea id="ai-question" name="pergunta" maxlength="1200" rows="3" required placeholder="Pergunte alguma coisa sobre o Pós-Vendas..."></textarea><div class="ai-compose"><small>Até 1.200 caracteres · voz preparada para a próxima fase</small><button type="button" class="btn btn-outline-info" disabled title="Voz disponível em uma próxima fase">🎙 Falar</button><button type="submit" class="btn btn-primary" id="ai-send">Enviar</button></div></form>
+  <p id="ai-feedback" class="ai-feedback" role="status"></p>
+</section>

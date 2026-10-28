@@ -11,6 +11,8 @@ from central_service import carregar_central, filtros, PERIODOS, PESOS
 from gerencial import serializar
 
 bp=Blueprint('central',__name__)
+from ai_routes import bp as ai_bp
+bp.register_blueprint(ai_bp)
 PERMISSOES=('central_ia_visualizar','central_ia_perguntar','central_ia_financeiro','central_ia_equipe','central_ia_clientes','central_ia_configurar')
 
 
@@ -24,8 +26,8 @@ def proteger():
     if not permitido('central_ia_visualizar'): abort(403)
 
 
-def dados(atualizar=False):
-    args=request.args.to_dict()
+def dados(atualizar=False,args=None):
+    args=request.args.to_dict() if args is None else dict(args)
     normalized=filtros(args)
     cache=current_app.extensions.setdefault('central_cache',dict(lock=RLock(),rows={}))
     key=(g.usuario.id,tuple(sorted(normalized.items())))
