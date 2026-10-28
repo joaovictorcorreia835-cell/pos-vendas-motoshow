@@ -86,6 +86,11 @@ def synchronize(documents,unit,folder,apply=False,backup_dir='backups',commit=Tr
    if p.total!=row['liquido']:p.itens=[ItemOrdem(categoria='Peças (Balcão)',centavos=row['liquido'])]
    p.data=datetime.combine(datetime.fromisoformat(row['data']).date(),p.data.time());p.consultor=consultant(row['consultor'])
    v.numero=row['numero'];v.codigo_interno=row['codigo_interno'];v.arquivo=summary['arquivo'];v.sha256=summary['sha256'];v.pagina=row['pagina'];v.dados=row
+  from gerencial_models import registrar_os
+  registrar_os(documents[:2],unit)
+  if sales_summary:
+   from gerencial_models import registrar_balcao
+   registrar_balcao(sales_rows,sales_summary,unit)
   if commit:db.session.commit()
   else:db.session.flush()
  except Exception:db.session.rollback();raise

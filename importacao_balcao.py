@@ -47,8 +47,11 @@ def atualizar():
                 novas_centavos=sum(r['liquido'] for r in novas),
                 ja_cadastradas=len(vendas) - len(novas),
                 devolucoes_ignoradas=len(rows) - len(vendas), sha256=resumo['sha256'])
-            if novas:
+            from gerencial_models import FonteGerencial, registrar_balcao
+            fonte = db.session.scalar(db.select(FonteGerencial.id).where(FonteGerencial.unidade==unidade,FonteGerencial.sha256==resumo['sha256']))
+            if novas or fonte is None:
                 backup = sqlite_snapshot(db.engine).getvalue()
+                registrar_balcao(rows, resumo, unidade)
                 import_rows(novas, resumo, unidade, pasta, commit=False, criar_backup=False)
                 # Uma nova aplicação após exclusão manual recebe seu próprio backup.
                 digest = hashlib.sha256(('balcao:' + resumo['sha256'] + ':' + datetime.now().isoformat()).encode()).hexdigest()

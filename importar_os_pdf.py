@@ -64,6 +64,8 @@ def read_pdf(path):
                 if not vehicle: raise ValueError(f'OS {number[0]}: moto não identificada.')
                 vehicle_id,model=vehicle.split(' - ',1)
                 row=dict(os=number[0],cliente=column(82,280),consultor=column(280,405),entrada=datetime.strptime(dates[0],'%d/%m/%Y').date().isoformat(),saida=datetime.strptime(dates[1],'%d/%m/%Y').date().isoformat() if len(dates)==2 else None,tipo_original=current_type,codigo_moto=vehicle_id,modelo=model,pecas=amounts[0],servicos=amounts[1],total_coluna_pdf=amounts[2],total=amounts[0]+amounts[1],pagina=page_num,mecanico=None)
+                row['nf_pecas']=column(500,560)
+                row['nf_servicos']=column(560,625)
                 if document_status in ['Aberta','Fechada']: row['situacao']=document_status
                 if not row['cliente'] or not row['consultor']: raise ValueError(f'OS {number[0]}: cliente/consultor ausente.')
                 rows.append(row)

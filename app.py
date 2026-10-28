@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent
 TIPOS = ['Troca de óleo','Revisão','Manutenção','Garantia','Seguro','Balcão','Outros']
 STATUS = ['Aberta','Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada','Finalizada','Cancelada']
 CATEGORIAS = ['Peças (Balcão)','Mão de obra','Óleos e lubrificantes','Acessórios','Pneus','Outros']
-MENUS = [('patio','◇','Motos no Pátio'),('dashboard','⌂','Visão Geral'),('ordens','▤','Ordens de Serviço'),('passagens','♧','Passagens'),('faturamento','▥','Faturamento'),('pedidos','▤','Pedidos em Aberto'),('pecas','◇','Peças (Balcão)'),('garantia','✚','Garantia'),('seguro','⬟','Seguro'),('clientes','♙','Clientes'),('relatorios','▧','Relatórios'),('configuracoes','⚙','Configurações')]
+MENUS = [('patio','◇','Motos no Pátio'),('dashboard','⌂','Visão Geral'),('ordens','▤','Ordens de Serviço'),('passagens','♧','Passagens'),('painel-gerencial','▥','Painel Gerencial'),('faturamento','▥','Faturamento'),('pedidos','▤','Pedidos em Aberto'),('pecas','◇','Peças (Balcão)'),('garantia','✚','Garantia'),('seguro','⬟','Seguro'),('clientes','♙','Clientes'),('relatorios','▧','Relatórios'),('configuracoes','⚙','Configurações')]
 def create_app(database=None):
     app=Flask(__name__)
     Path(app.instance_path).mkdir(exist_ok=True)
@@ -39,6 +39,8 @@ def create_app(database=None):
     app.register_blueprint(pedidos_bp)
     from importacao_balcao import bp as importacao_balcao_bp
     app.register_blueprint(importacao_balcao_bp)
+    from gerencial import bp as gerencial_bp
+    app.register_blueprint(gerencial_bp)
     with app.app_context():
         from schema_inventario import preparar_backup
         preparar_backup()

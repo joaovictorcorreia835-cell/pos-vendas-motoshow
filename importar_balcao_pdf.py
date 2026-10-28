@@ -12,7 +12,7 @@ DATE=re.compile(r'^\d{2}/\d{2}/\d{4}$')
 def cents(text):return int(Decimal(text.replace('.','').replace(',','.'))*100)
 
 def read_pdf(path):
- path=Path(path);rows=[];consultor=None;natureza=None;expected={};count=None
+ path=Path(path);rows=[];consultor=None;natureza=None;expected={};count=None;financeiro={}
  with pymupdf.open(path) as doc:
   for page_number,page in enumerate(doc,1):
    text=page.get_text(sort=True)
@@ -33,6 +33,10 @@ def read_pdf(path):
       amount=[w[4] for w in words if abs(w[1]-y)<3 and 565<=w[0]<617 and AMOUNT.fullmatch(w[4])]
       if len(amount)!=1:raise ValueError('Total do relatório ambíguo.')
       expected[key]=cents(amount[0])
+      if key=='liquido':
+       for campo,left,right in [('custo_rodape',625,665),('margem_rodape',670,715)]:
+        valores=[w[4] for w in words if abs(w[1]-y)<3 and left<=w[0]<right and AMOUNT.fullmatch(w[4])]
+        if len(valores)==1:financeiro[campo]=cents(valores[0])
     number=column(20,48);internal=column(48,100)
     if not number.isdigit() or not internal.isdigit():continue
     emitted=column(100,150);billed=column(380,425)
@@ -52,7 +56,9 @@ def read_pdf(path):
  if sales_count!=count or calculated!=expected:raise ValueError(f'Conferência falhou: {sales_count} vendas / {count}, {calculated} / {expected}')
  if len({(r['natureza'],r['nota']) for r in rows})!=len(rows):raise ValueError('Notas duplicadas no documento.')
  if any(not r['cliente'] for r in rows):raise ValueError('Cliente não identificado.')
- return rows,dict(**calculated,movimentos=len(rows),quantidades=dict(Counter(r['natureza'] for r in rows)),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),arquivo=path.name)
+ financeiro['custo_somado']=sum(r['custo'] for r in rows)
+ financeiro['margem_somada']=sum(r['liquido']-r['custo'] for r in rows)
+ return rows,dict(**calculated,**financeiro,movimentos=len(rows),quantidades=dict(Counter(r['natureza'] for r in rows)),sha256=hashlib.sha256(path.read_bytes()).hexdigest(),arquivo=path.name)
 
 def import_rows(rows,summary,unidade,backup_dir,commit=True,criar_backup=True):
  from models import db,Passagem,Cliente,Consultor,ItemOrdem,VendaBalcao

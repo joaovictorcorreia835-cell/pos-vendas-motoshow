@@ -27,3 +27,5 @@
 /* Valores financeiros acompanham a largura do próprio cartão. */
 .kpi{container-type:inline-size}.kpi>.kpi-money{font-size:clamp(13px,13cqi,32px);max-width:100%;line-height:1.25;letter-spacing:-.2px;font-variant-numeric:tabular-nums;white-space:normal;overflow-wrap:anywhere}
 @media(min-width:1151px) and (max-width:1450px){.kpis{grid-template-columns:repeat(4,minmax(0,1fr))}}
+
+aside>nav{max-height:calc(100% - 85px);overflow-y:auto;scrollbar-width:thin}
