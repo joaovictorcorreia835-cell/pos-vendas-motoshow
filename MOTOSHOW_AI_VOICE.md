@@ -1,5 +1,7 @@
 # Fase 2.1 — Motoshow AI Voice
 
+A [regra permanente de peças](AGENTS.md) vale igualmente para texto e voz. Perguntas que dependam de estoque ou movimentação individual de peças recebem a mensagem fixa definida pelo usuário, sem estimativas ou recomendações de reposição. A ABC continua por modelos/tipos de OS.
+
 ## Auditoria anterior e preservação
 
 Fase 2: `ai_routes.py` autentica, aplica CSRF, limita consultas e audita em `ConsultaIA`. `services/ai_manager.py` seleciona ferramentas fechadas e valida evidências; `ai_tools.py` lê somente projeções autorizadas dos cálculos existentes. A interface era um script único com histórico de sessão e botão de voz desabilitado.

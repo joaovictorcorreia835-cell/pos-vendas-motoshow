@@ -1,5 +1,7 @@
 # Motoshow AI — Fase 2
 
+Regra vigente de peças: ver [AGENTS.md](AGENTS.md). Não implementar inteligência individual, giro, cobertura, ruptura, margem por peça, previsão de demanda nem recomendações de compra/reposição. As limitações históricas descritas abaixo não constituem autorização para acrescentar essas funções. A ABC aprovada permanece por modelos/tipos de OS; os cálculos agregados aprovados são preservados.
+
 ## Integração e preservação
 
 As fórmulas da Fase 1 permanecem em `central_service.py` e `gerencial_service.py`, sem alterações. O assistente lê o snapshot serializado de `central.dados`, incluindo o mesmo cache e os mesmos filtros validados. A única mudança nessa função foi aceitar argumentos internos opcionais; as chamadas existentes continuam iguais.

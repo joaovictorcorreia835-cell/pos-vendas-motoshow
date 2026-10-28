@@ -11,6 +11,7 @@ from time import monotonic
 from services.ai_tools import schemas, DESCRICOES
 from services.ai_prompts import PLANNER, WRITER, ANSWER_SCHEMA
 from services.ai_interaction import TARGETS, navegar, comando_navegacao, composto, contextual, resolver_contexto
+from services.parts_policy import MENSAGEM_PECAS, TOOLS_PECAS, depende_pecas, recomenda_pecas, resposta_limite
 
 ENDPOINT='https://api.openai.com/v1/responses'
 AVISOS={
@@ -147,6 +148,7 @@ def validar_resposta(answer,resultados):
     ids=answer['evidencias']
     if not isinstance(ids,list) or not 1<=len(ids)<=8 or any(not isinstance(k,str) or k not in fatos for k in ids):raise FalhaIA('resposta_invalida')
     textos=' '.join(answer[k] for k in ('diagnostico','impacto','recomendacao'))
+    if recomenda_pecas(textos):raise FalhaIA('resposta_invalida')
     # Números precisam estar presentes nas evidências realmente citadas.
     if not numeros(textos).issubset(numeros(' '.join(fatos[k] for k in ids))):raise FalhaIA('resposta_invalida')
     if re.search(r'https?://|<[^>]*>|\bsk[-_]',textos,re.I):raise FalhaIA('resposta_invalida')
@@ -160,6 +162,9 @@ def mensagem(answer,periodo):
 def responder(pergunta,tools,historico=None,alvo_contexto=None):
     pergunta=limpar_segredos(pergunta)
     if bloqueada(pergunta):return dict(type='answer',message='Este assistente é somente leitura. Não executa código, SQL, alterações ou ações externas e não fornece credenciais.',navigation=None,status='bloqueada',modo='local',ferramentas=[],resultados={})
+    if depende_pecas(pergunta,historico):
+        nome='get_produtos_sem_giro' if any(t in normal(pergunta) for t in ('giro','parad','estoque','cobertura','ruptura','reposicao')) else 'get_top_produtos'
+        return resposta_limite(tools,nome)
     nav=navegacao(pergunta)
     if nav and not composto(pergunta):return dict(type='navigation',message='Abrindo '+TARGETS[nav]['label']+'.',navigation=dict(target=nav),status='navegacao',modo='local',ferramentas=[],resultados={})
     if comando_navegacao(pergunta) and not nav:
@@ -189,6 +194,7 @@ def responder(pergunta,tools,historico=None,alvo_contexto=None):
         for c in calls:
             result=tools.executar(c['name'],{})
             inputs.append(dict(type='function_call_output',call_id=c['call_id'],output=json.dumps(result,ensure_ascii=False)))
+        if any(c['name'] in TOOLS_PECAS for c in calls):return resposta_limite(tools)
         remaining=deadline-monotonic()
         if remaining<1:raise FalhaIA('timeout')
         final=resposta_api(dict(model=model,store=False,instructions=WRITER,input=inputs,max_output_tokens=2200,reasoning=dict(effort='low'),
@@ -199,12 +205,12 @@ def responder(pergunta,tools,historico=None,alvo_contexto=None):
     if answer is None:
         # Não ampliar consultas por causa de uma ferramenta inválida proposta pelo modelo.
         for name in ferramentas_locais(pergunta):tools.executar(name,{})
+        if any(name in TOOLS_PECAS for name in tools.resultados):return resposta_limite(tools)
         fatos=[f['texto'] for r in tools.resultados.values() for f in r['fatos']][:8]
         critica=any('CRÍTICO:' in f or '; Crítico;' in f or '; Muito crítico;' in f for f in fatos)
-        produtos=any(n in tools.resultados for n in ('get_top_produtos','get_produtos_sem_giro'))
         answer=dict(diagnostico='Consulta local dos dados disponíveis; sem interpretação por IA. Não é possível afirmar causas ou tendência sem evidências adicionais.',
             evidencias=fatos,impacto='Os valores associados constam nas evidências; não representam perda confirmada.',
-            recomendacao='Revise primeiro as OS e alertas críticos destacados; confirme a causa e o responsável por cada pendência.' if critica else 'Importe linhas de produtos/SKU, quantidades e saldo de peças antes de decidir sobre reposição ou giro.' if produtos else 'Confira os indicadores e a cobertura dos relatórios do período no painel correspondente antes de definir uma ação.',prioridade='ALTA' if critica else 'MÉDIA')
+            recomendacao='Revise primeiro as OS e alertas críticos destacados; confirme a causa e o responsável por cada pendência.' if critica else 'Confira os indicadores e a cobertura dos relatórios do período no painel correspondente antes de definir uma ação.',prioridade='ALTA' if critica else 'MÉDIA')
     result=next(iter(tools.resultados.values()))
     p=result['periodo'];periodo=p['inicio']+' a '+p['fim']
     message=mensagem(answer,periodo)

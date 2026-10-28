@@ -1,5 +1,6 @@
 """Ferramentas recebem somente um snapshot autorizado da Fase 1; sem acesso ao ORM."""
 from copy import deepcopy
+from services.parts_policy import MENSAGEM_PECAS, TOOLS_PECAS
 
 
 def moeda(v):
@@ -17,8 +18,8 @@ DESCRICOES = {
     'get_ticket_medio':'Ticket médio das OS faturadas conforme cálculo existente.',
     'get_meta':'Meta cadastrada, realizado, falta e percentual atingido.',
     'get_curva_abc':'ABC por MODELO e TIPO de OS. Não é ABC de produtos.',
-    'get_top_produtos':'Verificar disponibilidade de ranking de produtos/SKU.',
-    'get_produtos_sem_giro':'Verificar disponibilidade de giro, ruptura e estoque de peças.',
+    'get_top_produtos':'Retorna somente a restrição do projeto: não há inteligência individual de peças/SKU.',
+    'get_produtos_sem_giro':'Retorna somente a restrição do projeto: sem giro, cobertura, ruptura ou reposição de peças.',
     'get_os_abertas':'Contagem e primeiras OS abertas cuja entrada pertence ao recorte.',
     'get_os_criticas':'OS com criticidade Crítico ou Muito crítico da Central.',
     'get_modelos_ranking':'Ranking de modelos pelo faturamento de OS.',
@@ -51,6 +52,10 @@ class Ferramentas:
     def executar(self,nome,argumentos):
         if nome not in DESCRICOES or argumentos!={}:raise ValueError('Ferramenta ou argumentos não autorizados.')
         if nome in self.resultados:return deepcopy(self.resultados[nome])
+        if nome in TOOLS_PECAS:
+            result=dict(ferramenta=nome,fatos=[dict(id=nome+':indisponivel',texto=MENSAGEM_PECAS)],limite_dados_pecas=True)
+            self.resultados[nome]=result
+            return deepcopy(result)
         d=self.data;b=d['base'];i=b['indicadores']
         fatos=[]
         def fato(codigo,label,v):fatos.append(dict(id=nome+':'+codigo,texto=label+': '+str(v)))
@@ -95,8 +100,6 @@ class Ferramentas:
         if nome=='get_score_pos_vendas':
             fato('score','Score',valor(d['score']['valor'])+' / 100; '+d['score']['classe'])
             for n,r in enumerate(d['score']['componentes']):fato(str(n),r['nome'],f"Nota {valor(r['valor'])}; peso efetivo {valor(r['peso'])}%")
-        if nome in ('get_top_produtos','get_produtos_sem_giro'):
-            fato('indisponivel','Dados insuficientes','Os dados disponíveis não permitem concluir isso com segurança. Não há linhas de SKU, quantidades ou saldo de peças validados para produtos, giro ou ruptura. Estoque de motos não é estoque de peças.')
         if nome=='get_estoque_motos':
             estoque=self.estoque_loader() if self.estoque_loader else dict(limite='Consulta de estoque não disponível neste contexto.')
             fato('limite','Escopo do estoque',estoque['limite'])

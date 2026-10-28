@@ -65,7 +65,7 @@ class MotoshowAITest(unittest.TestCase):
     def test_no_data_product_stock_limit_and_no_invented_revenue(self):
         with patch.dict(os.environ,{'OPENAI_API_KEY':''}):
             d=self.pergunta('Quais produtos estão parados?').json
-            self.assertIn('não permitem concluir',d['message'])
+            self.assertEqual(d['message'],'Os dados disponíveis atualmente não permitem uma análise confiável do estoque e movimentação individual de peças.')
             self.assertEqual(d['ferramentas'],['get_produtos_sem_giro'])
             empty=self.pergunta('Qual modelo gera mais faturamento?').json
             self.assertIn('não permitem concluir',empty['message'])

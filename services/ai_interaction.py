@@ -74,7 +74,7 @@ def resolver_contexto(text,historico=None,alvo=None):
 def resumo_falado(result):
     """Extrai trechos da resposta já validada, sem pedir nova interpretação ao modelo."""
     if result.get('type')=='navigation':return result.get('message','')[:350]
-    if result.get('status') in ('bloqueada','fora_escopo','contexto_insuficiente','navegacao_invalida','erro_local'):
+    if result.get('status') in ('bloqueada','fora_escopo','contexto_insuficiente','navegacao_invalida','erro_local','limite_dados_pecas'):
         return result.get('message','')[:350]
     message=result.get('message','')
     diagnostico=message.split('DIAGNÓSTICO\n',1)[-1].split('\n\n',1)[0]
