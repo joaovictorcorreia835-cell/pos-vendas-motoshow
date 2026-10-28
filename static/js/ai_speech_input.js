@@ -4,34 +4,34 @@
   function create(options={}){
     const env=options.env||globalThis,Recognition=env.SpeechRecognition||env.webkitSpeechRecognition;
     const state=options.onState||(()=>{}),error=options.onError||(()=>{}),transcript=options.onTranscript||(()=>{}),interim=options.onInterim||(()=>{});
-    let current=null,active=false,timer=null,sequence=0;
+    let current=null,active=false,listening=false,timer=null,sequence=0;
     const supported=!!Recognition&&env.isSecureContext!==false;
     function clear(){if(timer!==null)env.clearTimeout(timer);timer=null;}
-    function abort(){const had=active;active=false;sequence++;clear();if(current){try{current.abort();}catch{}}current=null;if(had)state('IDLE');return had;}
+    function abort(){const had=active;active=false;listening=false;sequence++;clear();if(current){try{current.abort();}catch{}}current=null;if(had)state('IDLE');return had;}
     function fail(code){abort();state('ERROR');error(messages[code]||messages.failed,code in messages?code:'failed');}
     function start(){
       if(!supported){fail('unsupported');return false;}if(active)return false;
       const id=++sequence;
       try{
         const rec=new Recognition();current=rec;active=true;rec.lang='pt-BR';rec.continuous=false;rec.interimResults=true;rec.maxAlternatives=1;
-        rec.onstart=()=>{if(active&&sequence===id)state('LISTENING');};
+        rec.onstart=()=>{if(active&&sequence===id){listening=true;state('LISTENING');}};
         rec.onresult=event=>{
           if(!active||sequence!==id)return;let finals='',partial='';
           for(let n=0;n<event.results.length;n++){const r=event.results[n],text=r[0]?.transcript||'';if(r.isFinal)finals+=text+' ';else partial+=text+' ';}
           interim((finals+partial).trim());
           if(finals.trim()){
-            const text=finals.trim();active=false;clear();sequence++;current=null;try{rec.stop();}catch{try{rec.abort();}catch{}}
+            const text=finals.trim();active=false;listening=false;clear();sequence++;current=null;try{rec.stop();}catch{try{rec.abort();}catch{}}
             state('TRANSCRIBING');transcript(text);
           }
         };
-        rec.onspeechend=()=>{if(active&&sequence===id){state('TRANSCRIBING');try{rec.stop();}catch{fail('failed');}}};
+        rec.onspeechend=()=>{if(active&&sequence===id){listening=false;state('TRANSCRIBING');try{rec.stop();}catch{fail('failed');}}};
         rec.onerror=event=>{if(!active||sequence!==id)return;fail(event.error==='aborted'?'failed':event.error);};
         rec.onend=()=>{if(active&&sequence===id)fail('empty');};
         state('LISTENING');rec.start();timer=env.setTimeout(()=>{if(active&&sequence===id)fail('timeout');},20000);
         return true;
       }catch{fail('failed');return false;}
     }
-    return {supported,start,abort,get active(){return active;}};
+    return {supported,start,abort,get active(){return active;},get listening(){return listening;}};
   }
   return {create};
 });

@@ -65,4 +65,4 @@ Testes JavaScript com APIs simuladas: ativação explícita, permissão, transcr
 
 O runtime do navegador retornou `No browser is available`, com lista de navegadores vazia. Por isso, testes de microfone físico, qualidade da voz, autoplay real e conferência visual em Chrome/Edge não foram executados nesta sessão. Os testes automatizados de eventos não substituem essa validação manual. Publicação e chat escrito serão conferidos no serviço real.
 
-Resultado dos testes automatizados: 263 testes Python passaram, preservando os 255 anteriores, e 12 testes JavaScript passaram (275 verificações). Validação de microfone físico permanece pendente.
+Resultado dos testes automatizados: 263 testes Python passaram, preservando os 255 anteriores, e 13 testes JavaScript passaram (276 verificações). Validação de microfone físico permanece pendente.
