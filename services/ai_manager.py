@@ -165,6 +165,8 @@ def responder(pergunta,tools,historico=None,alvo_contexto=None):
     if depende_pecas(pergunta,historico):
         nome='get_produtos_sem_giro' if any(t in normal(pergunta) for t in ('giro','parad','estoque','cobertura','ruptura','reposicao')) else 'get_top_produtos'
         return resposta_limite(tools,nome)
+    from services.ai_briefing import pedido_briefing, briefing
+    if pedido_briefing(pergunta):return briefing(tools)
     nav=navegacao(pergunta)
     if nav and not composto(pergunta):return dict(type='navigation',message='Abrindo '+TARGETS[nav]['label']+'.',navigation=dict(target=nav),status='navegacao',modo='local',ferramentas=[],resultados={})
     if comando_navegacao(pergunta) and not nav:

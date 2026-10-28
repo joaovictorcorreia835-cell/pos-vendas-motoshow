@@ -5,7 +5,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from threading import RLock
 from time import monotonic
-from flask import Blueprint, abort, current_app, g, jsonify, request, session
+from flask import Blueprint, Response, abort, current_app, g, jsonify, request, session
 from sqlalchemy import func
 from models import db
 from ai_models import ConsultaIA
@@ -97,7 +97,7 @@ def perguntar():
     # Higienizar também textos recebidos do provedor e metadados antes de persistir.
     result['origem']=origem
     result['contexto']=alvo_valido((result.get('navigation') or {}).get('target')) or topico(pergunta) or alvo_valido(contexto)
-    result['speech_summary']=resumo_falado(result)
+    result['speech_summary']=result.get('speech_summary') or resumo_falado(result)
     result=higienizar(result)
     view=publico(result)
     row=db.session.get(ConsultaIA,ident)
@@ -108,6 +108,42 @@ def perguntar():
     current_app.logger.warning('MOTOSHOW_AI_INTERACAO usuario=%s origem=%s status=%s tempo_ms=%s ferramentas=%s navegacao=%s',
         uid,origem,row.status,row.tempo_ms,','.join(row.ferramentas),(view.get('navigation') or {}).get('target','nenhuma'))
     return jsonify(dict(view,id=ident,tempo_ms=row.tempo_ms))
+
+
+@bp.post('/voz')
+def voz():
+    """Somente resumo auditado do próprio usuário/sessão ou amostra neutra fixa."""
+    from services.voice_service import gerar_audio, VoiceError, SAMPLE
+    if request.files or set(request.form)-{'csrf','id','amostra','voz','velocidade'}:abort(400)
+    try:
+        speed=float(request.form.get('velocidade','1'))
+        ident=int(request.form.get('id','0'))
+    except ValueError:abort(400)
+    voice=request.form.get('voz','cedar')
+    if voice not in ('cedar','onyx','ash') or speed not in (0.9,1.0,1.1):abort(400)
+    if request.form.get('amostra')=='sim' and not ident:text=SAMPLE
+    else:
+        row=db.session.scalar(db.select(ConsultaIA).where(ConsultaIA.id==ident,ConsultaIA.usuario_id==g.usuario.id,ConsultaIA.sessao==sessao_chat()))
+        if not row:abort(404)
+        text=(row.resposta or {}).get('speech_summary','')
+        if not text:abort(400)
+    # Limite adicional por usuário/processo, independente de replay do cookie.
+    guard=current_app.extensions.setdefault('ai_voice_rate',dict(lock=RLock(),users={}))
+    with guard['lock']:
+        now=monotonic()
+        guard['users']={u:ts for u,ts in guard['users'].items() if ts and now-ts[-1]<60}
+        if len(guard['users'])>=256 and g.usuario.id not in guard['users']:return jsonify(error='Aguarde para gerar áudio.'),429
+        stamps=[t for t in guard['users'].get(g.usuario.id,[]) if now-t<60]
+        if len(stamps)>=6:return jsonify(error='Aguarde um minuto para gerar novo áudio.'),429
+        guard['users'][g.usuario.id]=stamps+[now]
+    db.session.rollback()
+    try:
+        audio=gerar_audio(text,voice,speed)
+    except VoiceError as error:
+        current_app.logger.warning('MOTOSHOW_AI_VOZ usuario=%s resultado=%s',g.usuario.id,error.code)
+        return jsonify(error='Áudio indisponível. A resposta escrita foi preservada.',tipo=error.code),error.http
+    current_app.logger.warning('MOTOSHOW_AI_VOZ usuario=%s resultado=ok',g.usuario.id)
+    return Response(audio,mimetype='audio/mpeg',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
 
 
 @bp.post('/telemetria')

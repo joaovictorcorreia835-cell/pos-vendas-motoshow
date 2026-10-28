@@ -33,7 +33,7 @@ def alvo_valido(value):
 
 def topico(text):
     q=normal(text)
-    for pattern,target in [(r'\b(curva abc|abc)\b','curva_abc'),(r'\bos criticas\b','os_criticas'),
+    for pattern,target in [(r'\b(curva abc|abc)\b','curva_abc'),(r'\bos (?:estao )?criticas\b','os_criticas'),
         (r'\bscore\b','score'),(r'\balertas?\b','alertas'),(r'\b(meta|metas|realizado)\b','meta_realizado'),
         (r'\b(oficina|os abertas)\b','oficina'),(r'\b(indicadores|faturamento|receita)\b','indicadores'),
         (r'\b(resumo executivo|resumo)\b','resumo_executivo'),(r'\brelatorio\b','relatorio'),
@@ -59,7 +59,7 @@ def composto(text):
 
 
 def contextual(text):
-    return bool(re.search(r'\b(desses|dessas|disso|isso|esses|essas|esses dados|nesse nivel|deles|delas|mais atencao)\b',normal(text)))
+    return bool(re.search(r'\b(desses|dessas|disso|isso|esses|essas|esses dados|nesse nivel|deles|delas|mais atencao|mais antiga|mais antigo)\b',normal(text)))
 
 
 def resolver_contexto(text,historico=None,alvo=None):
