@@ -43,8 +43,6 @@ def create_app(database=None):
     app.register_blueprint(gerencial_bp)
     from central import bp as central_bp
     app.register_blueprint(central_bp)
-    from openai_connectivity_temp import bp as teste_openai_bp
-    app.register_blueprint(teste_openai_bp)
     with app.app_context():
         from schema_inventario import preparar_backup
         preparar_backup()
