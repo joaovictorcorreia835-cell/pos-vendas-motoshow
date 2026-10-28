@@ -44,7 +44,8 @@ def dados(atualizar=False,args=None):
 def painel():
     try: result=dados()
     except ValueError as error: abort(400,description=str(error))
-    return render_template('central_inteligencia.html',page='central-inteligencia',d=result,periodos=PERIODOS,relatorio=False)
+    from services.ai_interaction import TARGETS
+    return render_template('central_inteligencia.html',page='central-inteligencia',d=result,periodos=PERIODOS,relatorio=False,ai_navigation=TARGETS)
 
 
 @bp.get('/api/central-inteligencia')

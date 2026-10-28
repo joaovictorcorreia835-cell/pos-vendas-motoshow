@@ -10,6 +10,7 @@ from decimal import Decimal, InvalidOperation
 from time import monotonic
 from services.ai_tools import schemas, DESCRICOES
 from services.ai_prompts import PLANNER, WRITER, ANSWER_SCHEMA
+from services.ai_interaction import TARGETS, navegar, comando_navegacao, composto, contextual, resolver_contexto
 
 ENDPOINT='https://api.openai.com/v1/responses'
 AVISOS={
@@ -19,7 +20,7 @@ AVISOS={
     'limite_uso':'O provedor de IA atingiu um limite de uso. Exibindo consulta local.',
     'indisponivel':'A IA está temporariamente indisponível. Exibindo consulta local.',
     'resposta_invalida':'A resposta de IA não passou na validação. Exibindo apenas os resultados locais.'}
-ALVOS={'curva_abc':'abc','os_criticas':'oficina','faturamento':'indicadores','painel_oficina':'oficina','metas':'metas'}
+ALVOS=TARGETS
 
 
 class FalhaIA(Exception):
@@ -54,11 +55,7 @@ def bloqueada(pergunta):
 
 
 def navegacao(pergunta):
-    q=normal(pergunta)
-    if not re.search(r'\b(abra|abrir|mostre|mostrar|va para|ir para)\b',q):return None
-    for termo,target in [('abc','curva_abc'),('os critica','os_criticas'),('oficina','painel_oficina'),('faturamento','faturamento'),('meta','metas')]:
-        if termo in q:return target
-    return None
+    return navegar(pergunta)
 
 
 def escopo(pergunta):
@@ -160,11 +157,16 @@ def mensagem(answer,periodo):
     return '\n\n'.join(['DIAGNÓSTICO\n'+answer['diagnostico'],'EVIDÊNCIAS\n'+'\n'.join('• '+e for e in answer['evidencias']),'IMPACTO\n'+answer['impacto'],'RECOMENDAÇÃO\n'+answer['recomendacao'],'PRIORIDADE\n'+answer['prioridade'],'PERÍODO ANALISADO\n'+periodo])
 
 
-def responder(pergunta,tools,historico=None):
+def responder(pergunta,tools,historico=None,alvo_contexto=None):
     pergunta=limpar_segredos(pergunta)
     if bloqueada(pergunta):return dict(type='answer',message='Este assistente é somente leitura. Não executa código, SQL, alterações ou ações externas e não fornece credenciais.',navigation=None,status='bloqueada',modo='local',ferramentas=[],resultados={})
     nav=navegacao(pergunta)
-    if nav:return dict(type='navigation',message='Seção disponível para consulta. Use o botão abaixo para abri-la.',navigation=dict(target=nav),status='navegacao',modo='local',ferramentas=[],resultados={})
+    if nav and not composto(pergunta):return dict(type='navigation',message='Abrindo '+TARGETS[nav]['label']+'.',navigation=dict(target=nav),status='navegacao',modo='local',ferramentas=[],resultados={})
+    if comando_navegacao(pergunta) and not nav:
+        return dict(type='answer',message='Esse destino não está autorizado. Escolha uma seção da Central.',navigation=None,status='navegacao_invalida',modo='local',ferramentas=[],resultados={})
+    pergunta,contexto_resolvido=resolver_contexto(pergunta,historico,alvo_contexto)
+    if contextual(pergunta) and not contexto_resolvido and not escopo(pergunta):
+        return dict(type='answer',message='Qual seção você quer analisar: Curva ABC, oficina, metas ou score?',navigation=None,status='contexto_insuficiente',modo='local',ferramentas=[],resultados={})
     if not escopo(pergunta):return dict(type='answer',message='Posso ajudar com os dados do Pós-Vendas Motoshow. Pergunte sobre faturamento, metas, oficina, Curva ABC ou indicadores disponíveis.',navigation=None,status='fora_escopo',modo='local',ferramentas=[],resultados={})
     deadline=monotonic()+20
     status='ok';answer=None
@@ -206,5 +208,5 @@ def responder(pergunta,tools,historico=None):
     result=next(iter(tools.resultados.values()))
     p=result['periodo'];periodo=p['inicio']+' a '+p['fim']
     message=mensagem(answer,periodo)
-    return dict(type='answer',message=limpar_segredos(message),navigation=None,status=status,modo='ia' if status=='ok' else 'local',
+    return dict(type='answer',message=limpar_segredos(message),navigation=dict(target=nav) if nav else None,status=status,modo='ia' if status=='ok' else 'local',
         aviso=AVISOS.get(status),periodo=p,filtros=result['filtros'],fontes=result['fontes'],ferramentas=list(tools.resultados),resultados=tools.resultados)

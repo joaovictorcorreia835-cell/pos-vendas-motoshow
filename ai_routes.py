@@ -12,6 +12,7 @@ from ai_models import ConsultaIA
 from central_service import filtros
 from services.ai_manager import responder, limpar_segredos, periodo_pergunta, higienizar
 from services.ai_tools import Ferramentas
+from services.ai_interaction import alvo_valido, topico, resumo_falado
 
 bp=Blueprint('motoshow_ai',__name__,url_prefix='/central-inteligencia/ai')
 
@@ -39,6 +40,11 @@ def historico():
 
 @bp.post('/perguntar')
 def perguntar():
+    if request.files or set(request.form)-{'csrf','pergunta','origem','contexto'}:return jsonify(error='Campos não autorizados. Envie somente texto.'),400
+    origem=request.form.get('origem','texto')
+    contexto=request.form.get('contexto','')
+    if origem not in ('texto','voz') or (contexto and not alvo_valido(contexto)):
+        return jsonify(error='Origem ou contexto inválido.'),400
     pergunta=request.form.get('pergunta','').strip()
     if not 1<=len(pergunta)<=1200:return jsonify(error='Digite uma pergunta de até 1.200 caracteres.'),400
     pergunta=limpar_segredos(pergunta)
@@ -61,7 +67,11 @@ def perguntar():
         db.session.add(row);db.session.commit();ident=row.id
     if limitado:
         response=jsonify(row.resposta);response.status_code=429;response.headers['Retry-After']='60';return response
-    previous=db.session.scalars(db.select(ConsultaIA.pergunta).where(ConsultaIA.usuario_id==uid,ConsultaIA.sessao==chat,ConsultaIA.id<ident,ConsultaIA.status!='bloqueada').order_by(ConsultaIA.id.desc()).limit(4)).all()
+    previous_rows=db.session.scalars(db.select(ConsultaIA).where(ConsultaIA.usuario_id==uid,ConsultaIA.sessao==chat,ConsultaIA.id<ident,ConsultaIA.status.notin_(['bloqueada','fora_escopo','erro_local','limite_local','navegacao_invalida'])).order_by(ConsultaIA.id.desc()).limit(8)).all()
+    previous_rows=[r for r in previous_rows if r.filtros==normalizados][:4]
+    previous=[r.pergunta for r in previous_rows]
+    if not contexto:
+        contexto=next((alvo_valido(r.resposta.get('contexto')) or alvo_valido((r.resposta.get('navigation') or {}).get('target')) or topico(r.pergunta) for r in previous_rows if alvo_valido(r.resposta.get('contexto')) or alvo_valido((r.resposta.get('navigation') or {}).get('target')) or topico(r.pergunta)),None)
     def loader():
         from central import dados
         value=dados(args=args)
@@ -79,12 +89,15 @@ def perguntar():
         db.session.rollback()
         return value
     tools=Ferramentas(loader,estoque_loader)
-    try:result=responder(pergunta,tools,historico=list(reversed(previous)))
+    try:result=responder(pergunta,tools,historico=list(reversed(previous)),alvo_contexto=contexto)
     except Exception:
         # Falhas locais não devem expor SQL, credenciais ou stacktrace ao navegador.
         db.session.rollback()
         result=dict(type='answer',message='Não foi possível concluir a consulta. Os indicadores da Central continuam disponíveis. Tente novamente.',navigation=None,status='erro_local',modo='local',ferramentas=list(tools.resultados),resultados=tools.resultados)
     # Higienizar também textos recebidos do provedor e metadados antes de persistir.
+    result['origem']=origem
+    result['contexto']=alvo_valido((result.get('navigation') or {}).get('target')) or topico(pergunta) or alvo_valido(contexto)
+    result['speech_summary']=resumo_falado(result)
     result=higienizar(result)
     view=publico(result)
     row=db.session.get(ConsultaIA,ident)
@@ -92,4 +105,29 @@ def perguntar():
     row.tempo_ms=round((monotonic()-inicio)*1000);row.resposta=view
     row.periodo=result.get('periodo',row.periodo);row.filtros=result.get('filtros',row.filtros)
     db.session.commit()
+    current_app.logger.warning('MOTOSHOW_AI_INTERACAO usuario=%s origem=%s status=%s tempo_ms=%s ferramentas=%s navegacao=%s',
+        uid,origem,row.status,row.tempo_ms,','.join(row.ferramentas),(view.get('navigation') or {}).get('target','nenhuma'))
     return jsonify(dict(view,id=ident,tempo_ms=row.tempo_ms))
+
+
+@bp.post('/telemetria')
+def telemetria():
+    """Eventos de interface estritamente enumerados, sem áudio ou transcrição."""
+    from time import monotonic
+    permitidos={'microfone_erro','fala_erro','escuta_cancelada','fala_cancelada'}
+    codigos={'not-allowed','service-not-allowed','audio-capture','no-speech','network','aborted','language-not-supported','timeout','unsupported','failed','empty','cancelled'}
+    if request.files or set(request.form)-{'csrf','evento','codigo','latencia'}:abort(400)
+    evento,codigo=request.form.get('evento'),request.form.get('codigo')
+    try:latencia=int(request.form.get('latencia','0'))
+    except ValueError:abort(400)
+    if evento not in permitidos or codigo not in codigos or not 0<=latencia<=120000:abort(400)
+    guard=current_app.extensions.setdefault('ai_ui_rate',dict(lock=RLock(),users={}))
+    with guard['lock']:
+        now=monotonic()
+        guard['users']={u:ts for u,ts in guard['users'].items() if ts and now-ts[-1]<60}
+        if len(guard['users'])>=256 and g.usuario.id not in guard['users']:return jsonify(error='Aguarde para registrar novo evento.'),429
+        stamps=[t for t in guard['users'].get(g.usuario.id,[]) if now-t<60]
+        if len(stamps)>=20:return jsonify(error='Limite de eventos.'),429
+        guard['users'][g.usuario.id]=stamps+[now]
+    current_app.logger.warning('MOTOSHOW_AI_INTERFACE usuario=%s evento=%s codigo=%s latencia_ms=%s',g.usuario.id,evento,codigo,latencia)
+    return jsonify(status='registrado')
