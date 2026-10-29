@@ -10,6 +10,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{url_for('static',filename='css/gerencial.css',v=1)}}">
 <div class="gm-page">
+{% if dados.regras.passagens_fechadas %}<p class="gm-muted">Passagens contadas pelo relatório de OS fechadas, sem duplicar as faturadas. Os valores financeiros continuam exclusivos das OS faturadas e do balcão líquido. Nas datas ou unidades sem fonte de fechadas, a contagem permanece por entrada.</p>{% endif %}
 <div class="page-title gm-title"><div><span class="gm-eyebrow">MOTOSHOW · INTELIGÊNCIA DO PÓS-VENDAS</span><h2>Painel Gerencial</h2><p>{{dados.inicio.strftime('%d/%m/%Y')}} a {{dados.fim.strftime('%d/%m/%Y')}} · cálculos a partir dos relatórios importados</p></div><div class="row-actions"><a class="btn btn-outline-info" data-export="xlsx" href="#">Exportar Excel</a><a class="btn btn-outline-info" data-export="pdf" href="#">Exportar PDF</a></div></div>
 <form method="get" class="panel gm-filtros" id="gm-filtros">
 <fieldset class="gm-periodos"><legend>Período</legend>{% for key,label in [('hoje','Hoje'),('semana','Semana'),('mes','Mês'),('personalizado','Personalizado')] %}<label><input type="radio" name="periodo" value="{{key}}" {{'checked' if request.args.get('periodo','mes')==key}}><span>{{label}}</span></label>{% endfor %}</fieldset>
@@ -40,4 +41,4 @@
 <dialog id="gm-detalhe" class="gm-dialog" aria-labelledby="gm-detalhe-titulo"><div class="page-title"><div><h2 id="gm-detalhe-titulo">Registros do indicador</h2><p id="gm-detalhe-contagem"></p></div><form method="dialog"><button class="btn btn-outline-info">Fechar</button></form></div><div class="table-scroll"><table><thead><tr><th>Documento</th><th>Cliente</th><th>Modelo / Origem</th><th>Consultor</th><th>Data</th><th>Status</th><th>Valor da transação</th><th>Ficha</th></tr></thead><tbody id="gm-detalhe-linhas"></tbody></table></div></dialog>
 </div>
 {% endblock %}
-{% block scripts %}<script id="gm-dados" type="application/json">{{payload|tojson}}</script><script src="{{url_for('static',filename='vendor/chart.umd.min.js')}}"></script><script src="{{url_for('static',filename='js/gerencial.js',v=1)}}"></script>{% endblock %}
+{% block scripts %}<script id="gm-dados" type="application/json">{{payload|tojson}}</script><script src="{{url_for('static',filename='vendor/chart.umd.min.js')}}"></script><script src="{{url_for('static',filename='js/gerencial.js',v=2)}}"></script>{% endblock %}

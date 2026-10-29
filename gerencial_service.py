@@ -125,15 +125,17 @@ def venda_registro(dados, unidade, cliente=None, passagem_id=None, arquivo='', s
 
 
 def abc(rows, chave, rotulo):
-    grupos = {}
+    grupos = {}; vistos=set()
     for row in rows:
         key = row[chave]
         g = grupos.setdefault(key, dict(nome=key, descricao=row.get('descricao', ''),
             passagens=0, quantidade=0, pecas=0, servicos=0, total=0, faturadas=0, ids=[]))
         if row.get('por_entrada'):
             g['passagens'] += 1
-        g['quantidade'] += 1
-        g['ids'].append(row['id'])
+        identity=(key,row.get('unidade'),row.get('numero',row['id']))
+        if identity not in vistos:
+            g['quantidade'] += 1;vistos.add(identity)
+        if row['id'] is not None and row['id'] not in g['ids']:g['ids'].append(row['id'])
         if row.get('faturada'):
             for campo in ('pecas', 'servicos', 'total'):
                 g[campo] += row[campo]
@@ -161,15 +163,16 @@ def selecionar(orders, sales, inicio, fim, args):
         if args.get('modelo') and original['modelo'] != args['modelo']:
             continue
         row = dict(original)
-        row['por_entrada'] = inicio <= row['entrada'] <= fim
+        entrada_periodo = inicio <= row['entrada'] <= fim
+        row['por_entrada'] = entrada_periodo and row.get('conta_passagem',True)
         mensal = row['competencia'] in janela_meses if row['competencia'] else False
         row['faturada'] = row['status'] == 'Finalizada' and (
             inicio <= row['fiscal'] <= fim if row['fiscal'] else completo and mensal)
         if row['status'] == 'Finalizada' and not row['fiscal'] and (
             (mensal and not completo) or (not row['competencia'] and row['por_entrada'])):
             sem_data += 1
-        row['aberta'] = row['status'] not in ('Finalizada', 'Cancelada') and row['por_entrada']
-        if row['status'] != 'Cancelada' and (row['por_entrada'] or row['faturada']):
+        row['aberta'] = row['status'] not in ('Finalizada', 'Cancelada','Fechada') and entrada_periodo
+        if row['status'] != 'Cancelada' and (entrada_periodo or row['faturada']):
             os_selecionadas.append(row)
     balc = [dict(row) for row in sales if inicio <= row['data'] <= fim
         and (not args.get('consultor') or row['consultor_key'] == args['consultor'])
@@ -367,7 +370,9 @@ def carregar(args):
     if args.get('unidade'):
         fontes_os=fontes_os.where(FonteGerencial.unidade==args['unidade'])
     referencias={}
-    for fonte in db.session.scalars(fontes_os):
+    fontes_os=db.session.scalars(fontes_os).all()
+    for fonte in fontes_os:
+        if fonte.tipo=='OS Fechada':continue
         for numero,nfs in fonte.resumo.get('referencias_fiscais',{}).items():
             referencias[(fonte.unidade,numero)]=nfs
     for row in orders:
@@ -397,6 +402,8 @@ def carregar(args):
         if (r.unidade,'Devolução',r.nota) not in chaves:
             sales.append(venda_registro(r.dados,r.unidade,notas_clientes.get((r.unidade,r.nota)),
                 arquivo=r.arquivo,sha256=r.sha256,importado_em=r.importado_em))
+    from services.passagens_fechadas import aplicar
+    orders=aplicar(orders,fontes_os,anterior_inicio,fim)
     filtros=dict(args)
     if filtros.get('consultor'):
         filtros['consultor']=normal(filtros['consultor'])
@@ -405,7 +412,8 @@ def carregar(args):
         emitido_em=datetime.now(ZoneInfo('America/Sao_Paulo')).isoformat(),filtros=filtros,
         opcoes=dict(consultores=sorted({r['consultor_key']:r['consultor'] for r in orders+sales}.items()),
             tipos=sorted({r['tipo'] for r in orders}),modelos=sorted({r['modelo'] for r in orders})),
-        regras=dict(margem_limite=None,metas_configuradas=False,itens_pecas_disponiveis=False))
+        regras=dict(margem_limite=None,metas_configuradas=False,itens_pecas_disponiveis=False,
+            passagens_fechadas=any(r.get('somente_passagem') for r in orders)))
     usados=data['registros']+data['vendas']+data['devolucoes']
     fontes={r['sha256']:dict(arquivo=r['arquivo'],sha256=r['sha256'],ultima=r['importado_em']) for r in usados}
     manifestos=db.select(FonteGerencial).where(FonteGerencial.inicio<=fim,FonteGerencial.fim>=inicio)

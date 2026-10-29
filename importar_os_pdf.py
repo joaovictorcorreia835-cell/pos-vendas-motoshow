@@ -20,10 +20,12 @@ def cents(text):
 
 def read_pdf(path):
     path = Path(path)
-    rows=[]; current_type=None; footer=None; document_status=None
+    rows=[]; current_type=None; footer=None; document_status=None; periodo_entrada=None
     with pymupdf.open(path) as doc:
         for page_num, page in enumerate(doc, 1):
             text = page.get_text(sort=True)
+            intervalo=re.search(r'Data de entrada:\s*De (\d{2}/\d{2}/\d{4}) at[ée] (\d{2}/\d{2}/\d{4})',text)
+            if intervalo:periodo_entrada=[datetime.strptime(v,'%d/%m/%Y').date().isoformat() for v in intervalo.groups()]
             status_match=re.search(r'Situação da O\.S\.:\s*(Faturada|Aberta|Fechada)\b',text)
             if 'RELATÓRIO DE ORDEM DE SERVIÇO SINTÉTICO' not in text or not status_match:
                 raise ValueError(f'Página {page_num}: formato/situação de OS não reconhecido.')
@@ -73,7 +75,7 @@ def read_pdf(path):
     calculated=dict(count=len(rows),pecas=sum(r['pecas'] for r in rows),servicos=sum(r['servicos'] for r in rows),total=sum(r['total'] for r in rows))
     if footer!=calculated: raise ValueError(f'Extração não confere com o relatório: {calculated} != {footer}')
     if len({r['os'] for r in rows})!=len(rows): raise ValueError('OS duplicadas no PDF; requer conferência.')
-    return rows,dict(**footer,situacao=document_status,sha256=hashlib.sha256(path.read_bytes()).hexdigest(),arquivo=path.name,consultores=dict(Counter(r['consultor'] for r in rows)),mecanicos_informados=0,totais_individuais_divergentes=sum(r['total_coluna_pdf']!=r['total'] for r in rows),nomes_abreviados=sum('…' in r['cliente'] or '…' in r['consultor'] for r in rows),datas_saida_anteriores=sum(bool(r['saida'] and r['saida']<r['entrada']) for r in rows))
+    return rows,dict(**footer,situacao=document_status,periodo_entrada=periodo_entrada,sha256=hashlib.sha256(path.read_bytes()).hexdigest(),arquivo=path.name,consultores=dict(Counter(r['consultor'] for r in rows)),mecanicos_informados=0,totais_individuais_divergentes=sum(r['total_coluna_pdf']!=r['total'] for r in rows),nomes_abreviados=sum('…' in r['cliente'] or '…' in r['consultor'] for r in rows),datas_saida_anteriores=sum(bool(r['saida'] and r['saida']<r['entrada']) for r in rows))
 
 def export_review(rows,summary,folder):
     folder=Path(folder);folder.mkdir(parents=True,exist_ok=True)

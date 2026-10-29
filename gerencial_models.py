@@ -81,7 +81,11 @@ def registrar_os(documentos, unidade):
             continue
         datas = [date.fromisoformat(row['entrada']) for row in rows]
         dados_resumo={k: v for k, v in resumo.items() if k != 'arquivo'}
-        dados_resumo['referencias_fiscais']={r['os']:dict(pecas=r.get('nf_pecas',''),servicos=r.get('nf_servicos','')) for r in rows}
+        if resumo['situacao']=='Fechada':
+            # Fonte de volume, sem valores financeiros nem referências fiscais.
+            dados_resumo['passagens_fechadas']=[{k:r[k] for k in ('os','entrada','modelo','consultor','tipo_original','cliente')} for r in rows]
+        else:
+            dados_resumo['referencias_fiscais']={r['os']:dict(pecas=r.get('nf_pecas',''),servicos=r.get('nf_servicos','')) for r in rows}
         db.session.add(FonteGerencial(unidade=unidade, sha256=resumo['sha256'],
             arquivo=resumo['arquivo'], tipo='OS ' + resumo['situacao'], inicio=min(datas),
             fim=max(datas), registros=len(rows), duplicados=0,

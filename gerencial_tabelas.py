@@ -34,7 +34,7 @@ def tabelas(d):
 
 
 METRICAS = [
-    ('passagens','Passagens','int','OS com entrada no período','passagens'),
+    ('passagens','Passagens','int','OS fechadas do relatório; por entrada nas datas sem fonte de fechadas','passagens'),
     ('faturamento','Faturamento total','money','OS faturadas + balcão após devoluções','financeiro'),
     ('pecas','Faturamento de peças','money','Peças provenientes das OS faturadas','faturadas'),
     ('servicos','Faturamento de serviços','money','Serviços / mão de obra em OS faturadas','faturadas'),

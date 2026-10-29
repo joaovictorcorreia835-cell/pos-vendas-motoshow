@@ -34,11 +34,12 @@
    document.getElementById('gm-detalhe-contagem').textContent=registros.length+' registro(s) · os valores das OS abertas representam carteira, não faturamento';
    for(const row of registros){
      const tr=document.createElement('tr');
-     for(const value of [row.documento,row.cliente,row.origem,row.consultor,row.data,row.status,dinheiro(row.total)]){
+     for(const value of [row.documento,row.cliente,row.origem,row.consultor,row.data,row.somente_passagem?'Fechada · somente passagem':row.status,row.somente_passagem?'—':dinheiro(row.total)]){
        const td=document.createElement('td');td.textContent=value??'—';tr.append(td);
      }
      const td=document.createElement('td');
-     if(row.id){const a=document.createElement('a');a.href='/lancamento/'+row.id;a.textContent='Ver ficha';td.append(a);}
+     const ficha=row.ficha_id||(Number.isInteger(row.id)&&row.id>0?row.id:null);
+     if(ficha){const a=document.createElement('a');a.href='/lancamento/'+ficha;a.textContent='Ver ficha';td.append(a);}
      tr.append(td);tbody.append(tr);
    }
    if(!registros.length){const tr=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='Nenhum registro para este indicador e estes filtros.';tr.append(td);tbody.append(tr);}
