@@ -246,7 +246,7 @@ def acao_moto(ident):
         svc.receber(m,request.form.get('localizacao'),note)
     else:
         if not (acesso.exclusivo() and action in ('saida','transferir')):svc.permitir('GESTOR')
-        if action=='saida':svc.saida(m,request.form.get('destino'),request.form.get('motivo'),request.form.get('responsavel'),note,entrega_cliente=request.form.get('entrega_cliente')=='sim')
+        if action=='saida':svc.saida(m,request.form.get('destino'),request.form.get('motivo'),request.form.get('responsavel'),note,entrega_cliente=request.form.get('entrega_cliente')=='sim',data_saida=request.form.get('data_saida'))
         elif action=='retorno':svc.retorno(m,request.form.get('localizacao'),note)
         elif action=='transferir':svc.transferir(m,request.form.get('destino_unidade'),note)
         elif action=='editar':

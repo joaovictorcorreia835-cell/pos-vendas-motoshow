@@ -186,7 +186,7 @@ def mover(m, destino, observacao='', tipo='ALTERAÇÃO DE LOCALIZAÇÃO', invent
             db.session.add(DivergenciaMoto(moto_id=m.id,chassi=m.chassi_normalizado,tipo='NÃO ENCONTRADA',esperado=before['localizacao'],encontrado=target.nome,responsavel=ator()[1]))
 
 
-def saida(m, destino, motivo, responsavel, observacao='', entrega_cliente=False):
+def saida(m, destino, motivo, responsavel, observacao='', entrega_cliente=False, data_saida=None):
     from estoque_acesso import verificar_moto
     verificar_moto(m)
     if not all(str(v or '').strip() for v in (destino,motivo,responsavel)):
@@ -195,12 +195,25 @@ def saida(m, destino, motivo, responsavel, observacao='', entrega_cliente=False)
         raise ValueError('Destino/motivo: até 200 caracteres; responsável: até 150.')
     if m.saida_fisica_confirmada or pendente_transferencia(m):
         raise ValueError('Moto já saiu ou possui transferência pendente.')
+    registrado_em=agora()
+    efetiva=registrado_em
+    if data_saida:
+        try:dia=date.fromisoformat(str(data_saida))
+        except ValueError:raise ValueError('Informe uma data de saída válida.')
+        if dia>registrado_em.date():raise ValueError('Saída no futuro não é permitida.')
+        if m.data_entrada and dia<m.data_entrada:raise ValueError('Saída não pode ser anterior à entrada.')
+        if not observacao.strip():raise ValueError('Data de saída informada exige justificativa.')
+        efetiva=datetime.combine(dia,datetime.min.time())
     before = estado(m)
     m.saida_fisica_confirmada=True; m.presenca_confirmada=False; m.ativo=False
-    m.data_saida_fisica=agora(); m.usuario_saida=ator()[1]
+    m.data_saida_fisica=efetiva; m.usuario_saida=ator()[1]
     m.destino_saida=destino; m.motivo_saida=motivo; m.responsavel_saida=responsavel
     m.atualizado_em=agora()
-    db.session.flush(); auditar(m,'SAÍDA',before,observacao,novo=dict(estado(m),destino=destino,motivo=motivo,responsavel=responsavel,entrega_cliente=bool(entrega_cliente)))
+    db.session.flush()
+    event=auditar(m,'SAÍDA',before,observacao,novo=dict(estado(m),destino=destino,motivo=motivo,responsavel=responsavel,entrega_cliente=bool(entrega_cliente)))
+    if data_saida:
+        event.data_hora=efetiva
+        event.novo=dict(event.novo,registrado_em=registrado_em.isoformat(),horario_saida_informado=False)
 
 
 def entregas_periodo(inicio,fim,unidade_nome=''):

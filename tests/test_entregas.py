@@ -41,3 +41,31 @@ class EntregasTest(unittest.TestCase):
     def test_datas_invalidas(self):
         for query in ['inicio=erro','inicio=2026-10-26&fim=2026-10-25','inicio=2020-01-01&fim=2026-10-26']:
             self.assertEqual(self.c.get('/patio/entregas?'+query).status_code,400)
+
+    def test_entrega_retroativa_data_e_auditoria(self):
+        yesterday=(agora().date()-timedelta(days=1)).isoformat()
+        with self.app.app_context():
+            m=svc.cadastrar(dict(chassi='9C6AAAAAAA0000091',modelo='Moto retroativa',unidade='Parauapebas',data_entrada=yesterday))
+            ident=m.id;revision=m.revisao;db.session.commit()
+        response=self.c.post('/patio/motos/'+str(ident)+'/acao',data=dict(csrf=self.token,revisao=revision,acao='saida',destino='Cliente',motivo='Entrega',responsavel='Vendedora',entrega_cliente='sim',data_saida=yesterday,observacao='Entrega confirmada pelo titular. Horario nao informado.'))
+        self.assertEqual(response.status_code,302)
+        with self.app.app_context():
+            from inventario_models import MotoEstoque
+            m=db.session.get(MotoEstoque,ident)
+            self.assertTrue(m.saida_fisica_confirmada)
+            self.assertEqual(m.data_saida_fisica.date().isoformat(),yesterday)
+            events=db.session.scalars(db.select(MovimentacaoMoto).where(MovimentacaoMoto.moto_id==ident,MovimentacaoMoto.tipo_movimentacao=='SAÍDA')).all()
+            self.assertEqual(len(events),1)
+            self.assertEqual(events[0].data_hora.date().isoformat(),yesterday)
+            self.assertTrue(events[0].novo['registrado_em'].startswith(agora().date().isoformat()))
+            self.assertFalse(events[0].novo['horario_saida_informado'])
+        self.assertIn('Moto retroativa',self.c.get('/patio/entregas?inicio='+yesterday+'&fim='+yesterday).text)
+        self.assertNotIn('Moto retroativa',self.c.get('/patio/entregas').text)
+
+    def test_data_saida_invalida_nao_altera_moto(self):
+        with self.app.app_context():
+            m=svc.cadastrar(dict(chassi='9C6AAAAAAA0000092',modelo='Moto',unidade='Parauapebas',data_entrada=agora().date().isoformat()))
+            db.session.commit()
+            for value,note in [('invalida','Justificativa'),((agora().date()+timedelta(days=1)).isoformat(),'Justificativa'),((agora().date()-timedelta(days=1)).isoformat(),'Justificativa'),(agora().date().isoformat(),'')]:
+                with self.assertRaises(ValueError):svc.saida(m,'Cliente','Entrega','Responsavel',note,entrega_cliente=True,data_saida=value)
+                self.assertFalse(m.saida_fisica_confirmada)
