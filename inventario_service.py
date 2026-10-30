@@ -126,6 +126,8 @@ def obter_moto(ident, revisao=None):
 def cadastrar(data, origem='Cadastro manual'):
     vin = normalizar_chassi(data.get('chassi'))
     existing=db.session.scalar(select(MotoEstoque).where(MotoEstoque.chassi_normalizado==vin).with_for_update())
+    if existing and pendente_transferencia(existing):
+        raise ValueError('Moto em transferência. Use Confirmar recebimento no destino.')
     archived=existing and not existing.ativo and not existing.saida_fisica_confirmada
     if existing and not archived:
         raise ValueError('Chassi já cadastrado no estoque mestre.')
@@ -245,6 +247,25 @@ def transferir(m, destino, observacao):
     return row
 
 
+def despachar_transferencia(m, observacao):
+    from estoque_acesso import verificar_moto
+    verificar_moto(m)
+    transfer=pendente_transferencia(m)
+    if not transfer or m.localizacao.grupo!='TRANSITO' or m.saida_fisica_confirmada:
+        raise ValueError('A baixa exige uma transferência pendente em trânsito.')
+    if not observacao.strip():
+        raise ValueError('Informe a justificativa da retirada do estoque de origem.')
+    if not m.ativo:
+        return
+    before=estado(m)
+    m.ativo=False
+    m.presenca_confirmada=False
+    m.atualizado_em=agora()
+    db.session.flush()
+    auditar(m,'BAIXA DO ESTOQUE DE ORIGEM',before,observacao,
+        novo=dict(estado(m),transferencia_id=transfer.id,recebimento='Pendente'))
+
+
 def receber(m, destino, observacao):
     transfer=pendente_transferencia(m)
     if not transfer:
@@ -256,6 +277,7 @@ def receber(m, destino, observacao):
         raise ValueError('Selecione o local físico do recebimento.')
     unit=db.session.get(UnidadeEstoque,transfer.unidade_destino_id)
     before=estado(m); m.unidade_id=unit.id; m.unidade_nome=unit.nome
+    m.ativo=True
     mover(m,target.id,observacao,'RECEBIMENTO',recebimento=True)
     transfer.recebida_em=agora(); transfer.recebida_por=ator()[1]; transfer.pendente_moto=None
     auditar(m,'TRANSFERÊNCIA RECEBIDA',before,observacao)

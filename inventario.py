@@ -248,6 +248,7 @@ def acao_moto(ident):
         if not (acesso.exclusivo() and action in ('saida','transferir')):svc.permitir('GESTOR')
         if action=='saida':svc.saida(m,request.form.get('destino'),request.form.get('motivo'),request.form.get('responsavel'),note,entrega_cliente=request.form.get('entrega_cliente')=='sim',data_saida=request.form.get('data_saida'))
         elif action=='retorno':svc.retorno(m,request.form.get('localizacao'),note)
+        elif action=='despachar':svc.despachar_transferencia(m,note)
         elif action=='transferir':svc.transferir(m,request.form.get('destino_unidade'),note)
         elif action=='editar':
             if not note:raise ValueError('Correção cadastral exige justificativa.')

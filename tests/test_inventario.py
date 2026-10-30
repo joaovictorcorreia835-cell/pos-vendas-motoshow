@@ -165,6 +165,34 @@ class InventarioTest(unittest.TestCase):
             with self.assertRaises(ValueError):db.session.flush()
             db.session.rollback()
 
+    def test_baixa_transferencia_preserva_pendencia_e_recebimento(self):
+        ident=self.moto(location='PATIO')
+        other=self.moto(n=2,location='PATIO')
+        with self.app.app_context():
+            m=svc.obter_moto(ident);dest=svc.unidade('Canaa')
+            with self.assertRaises(ValueError):svc.despachar_transferencia(m,'Sem transferencia')
+            t=svc.transferir(m,dest.id,'Enviada');db.session.commit()
+            revision=m.revisao;transfer_id=t.id
+        response=self.post(f'/patio/motos/{ident}/acao',acao='despachar',revisao=revision,observacao='Enviada para Canaa; retirar do estoque de origem.')
+        self.assertEqual(response.status_code,200)
+        with self.app.app_context():
+            m=svc.obter_moto(ident)
+            self.assertFalse(m.ativo);self.assertFalse(m.presenca_confirmada)
+            self.assertFalse(m.saida_fisica_confirmada)
+            self.assertEqual(svc.pendente_transferencia(m).id,transfer_id)
+            self.assertTrue(db.session.get(MotoEstoque,other).ativo)
+            from inventario import consulta
+            self.assertNotIn(ident,[r.id for r in consulta({})])
+            self.assertIn(ident,[r.id for r in consulta({'situacao':'todas'})])
+            with self.assertRaises(ValueError):svc.cadastrar(dict(chassi=m.chassi,modelo='Duplicada',unidade='Parauapebas'))
+            svc.despachar_transferencia(m,'Repetida')
+            events=db.session.scalars(select(MovimentacaoMoto).where(MovimentacaoMoto.moto_id==ident,MovimentacaoMoto.tipo_movimentacao=='BAIXA DO ESTOQUE DE ORIGEM')).all()
+            self.assertEqual(len(events),1)
+            self.assertTrue(events[0].anterior['ativo']);self.assertFalse(events[0].novo['ativo'])
+            svc.receber(m,'PDV','Recebimento confirmado');db.session.commit()
+            self.assertTrue(m.ativo);self.assertTrue(m.presenca_confirmada)
+            self.assertEqual(m.unidade_nome,'Canaa');self.assertIsNone(svc.pendente_transferencia(m))
+
     def test_transferencia_recebimento_unidade_unica(self):
         ident=self.moto(location='PATIO')
         with self.app.app_context():
