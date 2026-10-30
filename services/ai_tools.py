@@ -67,8 +67,12 @@ class Ferramentas:
             indicadores([('passagens','Passagens',False),('os_faturadas','OS faturadas',False),('garantias','Garantias',False)])
         if nome=='get_ticket_medio':indicadores([('ticket','Ticket médio de OS faturadas',True)])
         if nome=='get_meta':
+            medidas=d['metas']
+            if d.get('plano_faturamento'):
+                p=d['plano_faturamento']
+                medidas=dict(meta=p['total_meta'],realizado=p['total_realizado'],falta=p['total_falta'],atingido=p['total_atingido'])
             for k,label,money in [('meta','Meta mensal',True),('realizado','Realizado',True),('falta','Falta para a meta',True),('atingido','Meta atingida (%)',False)]:
-                fato(k,label,moeda(d['metas'][k]) if money else valor(d['metas'][k]))
+                fato(k,label,moeda(medidas[k]) if money else valor(medidas[k]))
         if nome in ('get_meta','get_resumo_periodo','get_alertas') and d.get('plano_faturamento'):
             plano=d['plano_faturamento']
             fato('fonte_planilha','Fonte das metas por categoria',plano['fonte'])
@@ -121,5 +125,7 @@ class Ferramentas:
         result=dict(ferramenta=nome,fatos=fatos,periodo=dict(inicio=b['inicio'],fim=b['fim'],anterior_inicio=b['anterior_inicio'],anterior_fim=b['anterior_fim']),
             filtros=b['filtros'],fontes=dict(quantidade=len(b['auditoria']['fontes']),ultima_importacao=b['auditoria']['ultima'],processados=b['auditoria']['processados']),
             limites='Valores exclusivamente dos relatórios importados. Sem causa comprovada ou garantia de cobertura diária. Listas limitadas não representam a base inteira.')
+        if d.get('plano_faturamento') and nome in ('get_meta','get_resumo_periodo','get_alertas'):
+            result['limites']='Metas por categoria e crescimento usam a planilha mensal salva. Indicadores fiscais permanecem separados. Não somar fontes; mês em andamento é parcial; objetivos não são previsões.'
         self.resultados[nome]=result
         return deepcopy(result)

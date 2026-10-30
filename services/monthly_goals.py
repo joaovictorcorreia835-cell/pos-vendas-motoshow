@@ -22,6 +22,7 @@ def plano(ano, mes, unidade):
     taxa=Decimal(config.crescimento_percentual)
     proximo_ano,proximo_mes=(ano,mes+1) if mes<12 else (ano+1,1)
     return dict(unidade=unidade,competencia=config.competencia,categorias=categorias,total_meta=total,total_realizado=realizado,
+        total_atingido=round(100*realizado/total,2) if realizado is not None else None,total_falta=max(0,total-realizado) if realizado is not None else None,
         crescimento_minimo=float(taxa),crescimento_realizado=round(100*(realizado-anterior_total)/anterior_total,2) if realizado is not None and anterior_total and anterior_total>0 else None,
         proxima_competencia=f'{proximo_ano:04d}-{proximo_mes:02d}',proxima_meta=int((Decimal(total)*(1+taxa/100)).quantize(Decimal('1'),rounding=ROUND_HALF_UP)),
         fonte='Planilha de faturamento mensal salva; não somar ao faturamento dos relatórios fiscais.',

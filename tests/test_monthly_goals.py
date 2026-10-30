@@ -44,6 +44,8 @@ class MonthlyGoalsTest(unittest.TestCase):
             facts=Ferramentas(lambda:d).executar('get_meta',{})['fatos']
             text=' '.join(r['texto'] for r in facts)
             self.assertIn('125.000,00',text);self.assertIn('345.000,00',text)
+            self.assertIn('Realizado: R$ 252.962,27',text)
+            self.assertIn('Meta atingida (%): 84,32',text)
             self.assertIn('Crescimento mínimo mensal desejado (%): 15,0',text)
 
     def test_invalid_total_and_permissions(self):
