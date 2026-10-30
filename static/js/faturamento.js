@@ -6,7 +6,17 @@ function parseMoney(text,allowNegative=false){let s=String(text||'').trim().repl
 const form=document.getElementById('monthly-form'),body=document.getElementById('monthly-rows'),mechanics=document.getElementById('monthly-mechanics');let dirty=false;
 const allRows=()=>[...body.rows,...mechanics.rows];
 function markDirty(){dirty=true;document.getElementById('save-state').textContent='Alterações não salvas';document.getElementById('save-state').classList.add('unsaved');}
-function calculate(){const sums=Object.fromEntries(fields.map(k=>[k,0]));let invalid=false;for(const tr of allRows()){let rowTotal=0;for(const key of fields){const input=tr.querySelector(`[data-field="${key}"]`);const value=parseMoney(input.value,key==='balcao_centavos');input.classList.toggle('invalid-money',value===null);input.setAttribute('aria-invalid',String(value===null));if(value===null)invalid=true;else{sums[key]+=value;if(key!=='pendentes_centavos')rowTotal+=value;}}tr.querySelector('.row-total').textContent=brl(rowTotal);}for(const key of fields)document.getElementById('sum-'+key).textContent=brl(sums[key]);const total=sums.os_centavos+sums.balcao_centavos+sums.mao_centavos;document.getElementById('sum-total').textContent=brl(total);document.getElementById('draft-total').textContent='Total da planilha: '+brl(total);return !invalid;}
+function updateGoal(total,invalid){
+ const goal=document.getElementById('monthly-goal');if(!goal)return;
+ const target=Number(goal.dataset.target);if(!(target>0))return;
+ const percent=document.getElementById('monthly-goal-percent'),progress=document.getElementById('monthly-goal-progress'),remaining=document.getElementById('monthly-goal-remaining'),state=document.getElementById('monthly-goal-state');
+ if(invalid){percent.textContent='—';progress.removeAttribute('value');remaining.textContent='Corrija os valores para calcular a meta.';state.textContent='';return;}
+ const value=total*100/target;
+ percent.textContent=value.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+'%';progress.value=Math.max(0,Math.min(100,value));
+ remaining.textContent=total<target?'Faltam '+brl(target-total):total===target?'Meta atingida!':'Meta superada em '+brl(total-target);
+ state.textContent=dirty?'Prévia · alterações não salvas':'Com base nos valores da planilha';
+}
+function calculate(){const sums=Object.fromEntries(fields.map(k=>[k,0]));let invalid=false;for(const tr of allRows()){let rowTotal=0;for(const key of fields){const input=tr.querySelector(`[data-field="${key}"]`);const value=parseMoney(input.value,key==='balcao_centavos');input.classList.toggle('invalid-money',value===null);input.setAttribute('aria-invalid',String(value===null));if(value===null)invalid=true;else{sums[key]+=value;if(key!=='pendentes_centavos')rowTotal+=value;}}tr.querySelector('.row-total').textContent=brl(rowTotal);}for(const key of fields)document.getElementById('sum-'+key).textContent=brl(sums[key]);const total=sums.os_centavos+sums.balcao_centavos+sums.mao_centavos;document.getElementById('sum-total').textContent=brl(total);document.getElementById('draft-total').textContent='Total da planilha: '+brl(total);updateGoal(total,invalid);return !invalid;}
 function addRow(values={},edit=false,role=values.funcao||'consultor'){
  const tr=document.createElement('tr');tr.dataset.role=role;
  const visible=role==='mecanico'?['codigo','nome','mao_centavos','total']:['codigo','nome','os_centavos','balcao_centavos','total','pendentes_centavos'];

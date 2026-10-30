@@ -152,4 +152,7 @@ def painel():
     fonte_consultores=request.args.get('fonte_consultores','movimentos')
     if fonte_consultores not in ['movimentos','planilha']: fonte_consultores='movimentos'
     ranking=faturamento_consultores(ano,mes,unidade,record,fonte_consultores)
-    return render_template('faturamento.html',ranking=ranking,fonte_consultores=fonte_consultores, page='faturamento', ano=ano, mes=mes, meses=MESES, unidade=unidade, units=units, record=record, initial=initial, selected=selected, previous=previous, comparison=comparison, history=history, consultants=consultants, previous_label=f'{MESES[previous_key[1]-1]} / {previous_key[0]}', next_key=shift(ano,mes,1), previous_key=previous_key, today=date.today())
+    from central_models import ConfiguracaoCentral
+    meta_config = db.session.scalar(db.select(ConfiguracaoCentral).where(ConfiguracaoCentral.unidade==unidade, ConfiguracaoCentral.competencia==f'{ano:04d}-{mes:02d}'))
+    meta_centavos = meta_config.meta_centavos if meta_config else None
+    return render_template('faturamento.html',meta_centavos=meta_centavos,ranking=ranking,fonte_consultores=fonte_consultores, page='faturamento', ano=ano, mes=mes, meses=MESES, unidade=unidade, units=units, record=record, initial=initial, selected=selected, previous=previous, comparison=comparison, history=history, consultants=consultants, previous_label=f'{MESES[previous_key[1]-1]} / {previous_key[0]}', next_key=shift(ano,mes,1), previous_key=previous_key, today=date.today())
