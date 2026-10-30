@@ -94,4 +94,8 @@ def carregar_central(args):
     data=carregar(filtros(args))
     unidade=data['filtros'].get('unidade','')
     config=db.session.scalar(db.select(ConfiguracaoCentral).where(ConfiguracaoCentral.unidade==unidade,ConfiguracaoCentral.competencia==data['inicio'].strftime('%Y-%m')))
-    return analisar(data,config)
+    result=analisar(data,config)
+    if data['inicio'].day==1 and data['fim']==mes_fim(data['inicio']) and not any(data['filtros'].get(k) for k in ('consultor','modelo','tipo')):
+        from services.monthly_goals import plano
+        result['plano_faturamento']=plano(data['inicio'].year,data['inicio'].month,unidade)
+    return result

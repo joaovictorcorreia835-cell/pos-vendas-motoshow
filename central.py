@@ -82,6 +82,10 @@ def configurar():
             numero=Decimal(meta)
             if not numero.is_finite() or numero<=0 or numero>Decimal('1000000000') or numero.as_tuple().exponent < -2: raise ValueError()
             centavos=int(numero*100)
+        from central_models import MetaFaturamento
+        categorias=db.session.scalar(db.select(MetaFaturamento).where(MetaFaturamento.unidade==unidade,MetaFaturamento.competencia==competencia))
+        if categorias and centavos!=categorias.os_centavos+categorias.balcao_centavos+categorias.mao_centavos:
+            abort(400,description='Altere as metas por categoria e o total na página Faturamento mensal.')
         a,b=int(request.form.get('abc_a','80')),int(request.form.get('abc_b','95'))
         x,y,z=[int(request.form.get(k,v)) for k,v in [('dias_atencao','2'),('dias_critico','4'),('dias_muito_critico','8')]]
         if not 0<a<b<100 or not 0<x<y<z<=365: raise ValueError()

@@ -1,0 +1,15 @@
+{% if plano_metas %}
+<section class="panel monthly-growth"><h2>Objetivo de crescimento mensal</h2>
+<p><b>Mínimo de {{plano_metas.crescimento_minimo|round(2)}}% ao mês</b> · Meta planejada para {{plano_metas.proxima_competencia}}: <b>{{plano_metas.proxima_meta|brl}}</b></p>
+<p>Calculada sobre a meta de {{plano_metas.total_meta|brl}} deste mês. É um objetivo, não uma previsão de faturamento.</p>
+<p>{% if plano_metas.crescimento_realizado is not none %}Variação do total salvo frente ao mês anterior: <b>{{'%.2f'|format(plano_metas.crescimento_realizado)|replace('.',',')}}%</b>. O mês em andamento ainda é parcial.{% else %}Comparação de crescimento indisponível: exige os dois meses informados e o anterior positivo.{% endif %}</p>
+<a class="btn btn-outline-info" href="/central-inteligencia?periodo=personalizado&inicio={{'%04d-%02d-01'|format(ano,mes)}}&fim={{history[-1].ano}}-{{'%02d'|format(mes)}}-{{month_end}}&unidade={{unidade|urlencode}}">Analisar metas com a IA</a>
+<small>Na Central, pergunte: “Analise minhas metas por categoria e o objetivo de crescer 15% ao mês”. A IA usa os valores salvos.</small>
+</section>
+{% endif %}
+{% if g.usuario.administrador %}<section class="panel monthly-growth"><details><summary>Configurar metas deste mês e unidade</summary>
+<form method="post" action="/faturamento/metas" class="monthly-selector"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="ano" value="{{ano}}"><input type="hidden" name="mes" value="{{mes}}"><input type="hidden" name="unidade" value="{{unidade}}">
+{% for key,label in [('os_centavos','Ordem de serviço'),('balcao_centavos','Venda balcão'),('mao_centavos','Mão de obra')] %}<label>{{label}} (R$)<input type="number" name="{{key}}" min="0.01" step="0.01" required value="{{metas_categorias.get(key,0)/100}}"></label>{% endfor %}
+<label>Total (R$)<input type="number" name="total" min="0.01" step="0.01" required value="{{(meta_centavos or 0)/100}}"></label>
+<label>Crescimento mínimo (%)<input type="number" name="crescimento" min="0.01" max="100" step="0.01" required value="{{plano_metas.crescimento_minimo if plano_metas else 15}}"></label><button class="btn btn-primary">Salvar metas</button></form>
+</details></section>{% endif %}

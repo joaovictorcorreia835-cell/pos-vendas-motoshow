@@ -1,0 +1,7 @@
+{% macro indicador(meta, key='total') %}
+<div class="monthly-goal" {% if key=='total' %}id="monthly-goal"{% endif %} data-goal-key="{{key}}" data-target="{{meta or 0}}">
+{% if meta %}<div class="monthly-goal-heading"><b data-goal-percent></b><span>da meta</span></div>
+<progress data-goal-progress max="100" value="0" aria-label="Percentual da meta de {{key}} atingido"></progress>
+<small>Meta: {{meta|brl}}</small><small data-goal-remaining aria-live="polite"></small><small data-goal-state>Com base nos valores da planilha</small>
+{% else %}<small>Meta não configurada para este mês e unidade.</small>{% endif %}</div>
+{% endmacro %}

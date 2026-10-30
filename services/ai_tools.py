@@ -16,7 +16,7 @@ DESCRICOES = {
     'get_faturamento':'Receita total, peças de OS, mão de obra e balcão líquido de devoluções.',
     'get_passagens':'Quantidade de passagens, OS faturadas e garantias.',
     'get_ticket_medio':'Ticket médio das OS faturadas conforme cálculo existente.',
-    'get_meta':'Meta cadastrada, realizado, falta e percentual atingido.',
+    'get_meta':'Meta total, metas por categoria da planilha salva, realizado, falta, percentual e objetivo de crescimento mensal cadastrado.',
     'get_curva_abc':'ABC por MODELO e TIPO de OS. Não é ABC de produtos.',
     'get_top_produtos':'Retorna somente a restrição do projeto: não há inteligência individual de peças/SKU.',
     'get_produtos_sem_giro':'Retorna somente a restrição do projeto: sem giro, cobertura, ruptura ou reposição de peças.',
@@ -69,6 +69,16 @@ class Ferramentas:
         if nome=='get_meta':
             for k,label,money in [('meta','Meta mensal',True),('realizado','Realizado',True),('falta','Falta para a meta',True),('atingido','Meta atingida (%)',False)]:
                 fato(k,label,moeda(d['metas'][k]) if money else valor(d['metas'][k]))
+        if nome in ('get_meta','get_resumo_periodo','get_alertas') and d.get('plano_faturamento'):
+            plano=d['plano_faturamento']
+            fato('fonte_planilha','Fonte das metas por categoria',plano['fonte'])
+            for r in plano['categorias']:
+                fato('categoria_'+r['chave'],r['nome'],f"Meta {moeda(r['meta'])}; realizado salvo {moeda(r['realizado'])}; atingido {valor(r['atingido'])}%; falta {moeda(r['falta'])}")
+            fato('crescimento_objetivo','Crescimento mínimo mensal desejado (%)',valor(plano['crescimento_minimo']))
+            fato('crescimento_realizado','Variação da planilha frente ao mês anterior (%)',valor(plano['crescimento_realizado']))
+            fato('proxima_meta','Objetivo de meta para '+plano['proxima_competencia'],moeda(plano['proxima_meta']))
+            fato('limite_crescimento','Limite do planejamento',plano['limite'])
+            fato('acao_receita','Acompanhamento sugerido','Priorizar categorias com maior saldo para a meta; revisar OS abertas, capacidade da oficina, conversão de orçamentos e contato com clientes. São ações para avaliação humana, sem impacto financeiro estimado nem taxa de conversão presumida.')
         if nome in ('get_projecao_mes','get_meta'):
             fato('projecao','Projeção de fechamento',moeda(d['metas']['projecao']))
             fato('limite','Limite da previsão',d['metas']['motivo'])

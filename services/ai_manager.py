@@ -69,7 +69,7 @@ def escopo(pergunta):
 
 def ferramentas_locais(pergunta):
     q=normal(pergunta);nomes=[]
-    if any(t in q for t in ('meta','bater','fechamento','projecao')):nomes+=['get_meta','get_projecao_mes']
+    if any(t in q for t in ('meta','bater','fechamento','projecao','crescer','crescimento','aumentar')):nomes+=['get_meta','get_projecao_mes']
     if ('estoque' in q and 'moto' in q) or 'patio' in q or 'galpao' in q:nomes+=['get_estoque_motos']
     elif any(t in q for t in ('parad','giro','ruptura','nao podem faltar','estoque')):nomes+=['get_produtos_sem_giro']
     elif 'produto' in q:nomes+=['get_top_produtos']
@@ -208,7 +208,8 @@ def responder(pergunta,tools,historico=None,alvo_contexto=None):
         # Não ampliar consultas por causa de uma ferramenta inválida proposta pelo modelo.
         for name in ferramentas_locais(pergunta):tools.executar(name,{})
         if any(name in TOOLS_PECAS for name in tools.resultados):return resposta_limite(tools)
-        fatos=[f['texto'] for r in tools.resultados.values() for f in r['fatos']][:8]
+        limite=16 if 'get_meta' in tools.resultados and tools.data.get('plano_faturamento') else 8
+        fatos=[f['texto'] for r in tools.resultados.values() for f in r['fatos']][:limite]
         critica=any('CRÍTICO:' in f or '; Crítico;' in f or '; Muito crítico;' in f for f in fatos)
         answer=dict(diagnostico='Consulta local dos dados disponíveis; sem interpretação por IA. Não é possível afirmar causas ou tendência sem evidências adicionais.',
             evidencias=fatos,impacto='Os valores associados constam nas evidências; não representam perda confirmada.',

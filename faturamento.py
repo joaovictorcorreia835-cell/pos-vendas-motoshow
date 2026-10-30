@@ -2,12 +2,44 @@
 import json
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, g, abort
 from sqlalchemy.exc import IntegrityError
 from carregamento import atendimentos
 from models import db, Configuracao, FaturamentoMensal, FaturamentoConsultor, Passagem
 
 bp = Blueprint('mensal', __name__)
+
+@bp.post('/faturamento/metas')
+def salvar_metas():
+    if not getattr(g.usuario,'administrador',False):abort(403)
+    from central_models import MetaFaturamento, ConfiguracaoCentral
+    from central_service import PESOS
+    try:
+        ano=int(request.form['ano']);mes=int(request.form['mes'])
+        if not 2000<=ano<=2100 or not 1<=mes<=12:raise ValueError()
+        unidade=request.form['unidade'].strip()
+        if not unidade or len(unidade)>100:raise ValueError()
+        valores={k:money(request.form[k]) for k in ('os_centavos','balcao_centavos','mao_centavos')}
+        total=money(request.form['total'])
+        taxa=Decimal(request.form['crescimento'].replace(',','.'))
+        if any(v<=0 for v in valores.values()) or total!=sum(valores.values()) or not taxa.is_finite() or not 0<taxa<=100 or taxa.as_tuple().exponent < -2:raise ValueError()
+    except (KeyError,ValueError,InvalidOperation):abort(400,description='Revise as metas positivas, a soma das categorias e o percentual de crescimento.')
+    competencia=f'{ano:04d}-{mes:02d}'
+    row=db.session.scalar(db.select(MetaFaturamento).where(MetaFaturamento.unidade==unidade,MetaFaturamento.competencia==competencia))
+    if not row:row=MetaFaturamento(unidade=unidade,competencia=competencia);db.session.add(row)
+    for k,v in valores.items():setattr(row,k,v)
+    row.crescimento_percentual=taxa;row.atualizado_por=g.usuario.id;row.atualizado_em=datetime.now()
+    central=db.session.scalar(db.select(ConfiguracaoCentral).where(ConfiguracaoCentral.unidade==unidade,ConfiguracaoCentral.competencia==competencia))
+    if not central:
+        central=ConfiguracaoCentral(unidade=unidade,competencia=competencia,pesos=dict(PESOS));db.session.add(central)
+    central.meta_centavos=total;central.atualizado_por=g.usuario.id;central.atualizado_em=datetime.now()
+    db.session.commit()
+    from flask import current_app
+    cache=current_app.extensions.get('central_cache')
+    if cache:
+        with cache['lock']:cache['rows'].clear()
+    flash('Metas por categoria e objetivo de crescimento salvos.','success')
+    return redirect(url_for('mensal.painel',ano=ano,mes=mes,unidade=unidade))
 MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 CAMPOS = ['os_centavos','balcao_centavos','mao_centavos','pendentes_centavos']
 
@@ -155,4 +187,8 @@ def painel():
     from central_models import ConfiguracaoCentral
     meta_config = db.session.scalar(db.select(ConfiguracaoCentral).where(ConfiguracaoCentral.unidade==unidade, ConfiguracaoCentral.competencia==f'{ano:04d}-{mes:02d}'))
     meta_centavos = meta_config.meta_centavos if meta_config else None
-    return render_template('faturamento.html',meta_centavos=meta_centavos,ranking=ranking,fonte_consultores=fonte_consultores, page='faturamento', ano=ano, mes=mes, meses=MESES, unidade=unidade, units=units, record=record, initial=initial, selected=selected, previous=previous, comparison=comparison, history=history, consultants=consultants, previous_label=f'{MESES[previous_key[1]-1]} / {previous_key[0]}', next_key=shift(ano,mes,1), previous_key=previous_key, today=date.today())
+    from services.monthly_goals import plano
+    import calendar
+    plano_metas=plano(ano,mes,unidade)
+    metas_categorias={r['chave']:r['meta'] for r in plano_metas['categorias']} if plano_metas else {}
+    return render_template('faturamento.html',plano_metas=plano_metas,metas_categorias=metas_categorias,month_end=calendar.monthrange(ano,mes)[1],meta_centavos=meta_centavos,ranking=ranking,fonte_consultores=fonte_consultores, page='faturamento', ano=ano, mes=mes, meses=MESES, unidade=unidade, units=units, record=record, initial=initial, selected=selected, previous=previous, comparison=comparison, history=history, consultants=consultants, previous_label=f'{MESES[previous_key[1]-1]} / {previous_key[0]}', next_key=shift(ano,mes,1), previous_key=previous_key, today=date.today())
