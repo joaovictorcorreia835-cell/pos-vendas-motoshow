@@ -64,6 +64,7 @@ def escopo(pergunta):
     return bool(any(t in q for t in ('pos-venda','pos venda','oficina','peca','estoque','resultado','meta','receita','faturamento','ticket','abc','curva','produto','modelo','consultor','mecanico','cliente','garantia','alerta','oportunidade','prioridade','resumo','score','passage','dinheiro','margem','venda'))
         or re.search(r'\bOS\b',pergunta) or re.search(r'\bos (abertas|criticas|paradas|faturadas)\b',q)
         or re.search(r'como .*\b(meu mes|nosso mes|mes atual)\b',q)
+        or any(t in q for t in ('estrateg','campanha','dando certo','dando errado'))
         or ('compar' in q and any(t in q for t in ('mes','semana','ano','periodo'))))
 
 
@@ -83,6 +84,8 @@ def ferramentas_locais(pergunta):
     if any(t in q for t in ('perdendo','dinheiro','oportunidade','prioridade','alerta')):nomes+=['get_alertas','get_comparacao_periodos']
     if 'score' in q:nomes+=['get_score_pos_vendas']
     if any(t in q for t in ('faturamento','receita','pecas','mao de obra')):nomes+=['get_faturamento']
+    if any(t in q for t in ('estrateg','campanha','dando certo','dando errado','funcionando')):
+        nomes=['get_meta','get_comparacao_periodos','get_alertas','get_modelos_ranking']+nomes
     return list(dict.fromkeys(nomes or ['get_resumo_periodo']))[:4]
 
 
@@ -217,5 +220,8 @@ def responder(pergunta,tools,historico=None,alvo_contexto=None):
     result=next(iter(tools.resultados.values()))
     p=result['periodo'];periodo=p['inicio']+' a '+p['fim']
     message=mensagem(answer,periodo)
+    from services.ai_strategies import estrategias, texto_estrategias
+    plano_estrategico=estrategias(tools.data)
+    message+='\n\n'+texto_estrategias(plano_estrategico)
     return dict(type='answer',message=limpar_segredos(message),navigation=dict(target=nav) if nav else None,status=status,modo='ia' if status=='ok' else 'local',
-        aviso=AVISOS.get(status),periodo=p,filtros=result['filtros'],fontes=result['fontes'],ferramentas=list(tools.resultados),resultados=tools.resultados)
+        estrategias=plano_estrategico,aviso=AVISOS.get(status),periodo=p,filtros=result['filtros'],fontes=result['fontes'],ferramentas=list(tools.resultados),resultados=tools.resultados)

@@ -25,9 +25,11 @@ def briefing(tools):
     sections=[greeting,'Leitura dos indicadores disponíveis, conforme os filtros da Central.',revenue,passages,
         'Meta: '+meta,'Oficina: '+critical,'Curva ABC por modelos e tipos de OS. Destaque: '+abc,
         'Alertas e oportunidades: '+alert,'Recomendação: '+recommendation]
-    message='\n\n'.join(sections)
-    speech=' '.join(sections)
+    from services.ai_strategies import estrategias, texto_estrategias
+    plano_estrategico=estrategias(tools.data)
+    message='\n\n'.join(sections)+'\n\n'+texto_estrategias(plano_estrategico)
+    speech=' '.join(sections)+' Campanha proposta: '+plano_estrategico['campanhas'][0]['titulo']+'. Confira público a validar, ação e medição na resposta escrita.'
     first=results[0]
-    return dict(type='answer',message=message,speech_summary=speech,status='briefing',modo='local',navigation=None,
+    return dict(type='answer',message=message,speech_summary=speech,status='briefing',modo='local',navigation=None,estrategias=plano_estrategico,
         periodo=first['periodo'],filtros=first['filtros'],fontes=first['fontes'],
         ferramentas=list(tools.resultados),resultados=tools.resultados)

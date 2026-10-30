@@ -88,4 +88,7 @@ def resumo_falado(result):
     prefixo='Resposta local por regras. ' if result.get('modo')=='local' else ''
     if len(resumo)+len(prefixo)>460:resumo=partes[-1]
     resumo=prefixo+resumo
+    campanhas=(result.get('estrategias') or {}).get('campanhas',[])
+    if campanhas:
+        resumo=resumo[:280]+' Campanha proposta: '+campanhas[0]['titulo']+'. Veja público, ação e medição na resposta escrita.'
     return resumo
