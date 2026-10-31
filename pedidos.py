@@ -87,9 +87,15 @@ def filtered(args,start=None,end=None):
   q=q.where(db.func.lower(Pedido.consultor).in_([n.lower() for n in names]))
  return q.order_by(Pedido.inserido_em.desc(),Pedido.id.desc())
 
+def pendentes(query):
+ # Cliente genérico excluído somente das pendências; cadastro e situação preservados.
+ nome=db.func.upper(db.func.trim(db.func.replace(db.func.replace(Pedido.cliente,'\t',' '),'\n',' ')))
+ for _ in range(4):nome=db.func.replace(nome,'  ',' ')
+ return query.where(Pedido.status=='Aberto',nome!='AO CONSUMIDOR')
+
 def dashboard_data(args,start,end,brl):
  from indicadores import prazo
- q=filtered(args,start,end).where(Pedido.status=='Aberto');rows=db.session.scalars(q).all()
+ q=pendentes(filtered(args,start,end));rows=db.session.scalars(q).all()
  total=sum(p.liquido_centavos for p in rows)
  from decimal import ROUND_HALF_UP
  ticket=int((Decimal(total)/len(rows)).quantize(Decimal('1'),rounding=ROUND_HALF_UP)) if rows else 0
@@ -102,7 +108,9 @@ def listagem():
   start=datetime.fromisoformat(request.args['inicio']) if request.args.get('inicio') else None
   end=datetime.fromisoformat(request.args['fim'])+timedelta(days=1) if request.args.get('fim') else None
   q=filtered(request.args,start,end)
-  if request.args.get('situacao','Aberto'):q=q.where(Pedido.status==request.args.get('situacao','Aberto'))
+  situacao=request.args.get('situacao','Aberto')
+  if situacao=='Aberto':q=pendentes(q)
+  elif situacao:q=q.where(Pedido.status==situacao)
   rows=db.session.scalars(q).all()
   if request.args.get('prazo'):
    from indicadores import prazo

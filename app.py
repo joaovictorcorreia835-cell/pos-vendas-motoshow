@@ -216,10 +216,10 @@ def create_app(database=None):
         from indicadores import faturada_no_periodo
         ticket=ticket_medio([p for p in records(args,por_entrada=False) if faturada_no_periodo(p,start,end)])
         from indicadores import resumo_prazos
-        from pedidos import filtered as pedidos_filtered
+        from pedidos import filtered as pedidos_filtered, pendentes as pedidos_pendentes
         backlog_args=dict(args);backlog_args.update(inicio='1900-01-01',fim=date.today().isoformat())
         backlog_os=[p for p in records(backlog_args) if p.ordem and p.status not in ['Finalizada','Cancelada']]
-        backlog_pedidos=db.session.scalars(pedidos_filtered(args).where(Pedido.status=='Aberto')).all()
+        backlog_pedidos=db.session.scalars(pedidos_pendentes(pedidos_filtered(args))).all()
         alertas=dict(os=resumo_prazos(backlog_os,'data'),pedidos=resumo_prazos(backlog_pedidos,'inserido_em'))
         payload=dict(ticket_pedidos_faturados=ticket_pedidos_faturados(rows),alertas_prazo=alertas,ticket_medio=ticket,faturamento_pendente=pending_finance,range=dict(inicio=start.isoformat(),fim=end.isoformat()),pedidos=pedidos_summary,totals=totals,previous=prev,days=[d.strftime('%m/%Y' if finance['monthly'] else '%d/%m') for d in days],series=series,financial_monthly=finance['monthly'],financial_note=('Faturamento da planilha mensal. O consolidado substitui as OS da mesma unidade e mês; não há duplicação. Passagens e status continuam vindo dos atendimentos.' if finance['monthly'] else 'Consolidado mensal disponível: selecione Este mês, Mês anterior ou um intervalo começando no dia 1, sem filtro de tipo ou status.' if finance['saved'] else ''),category_labels=CATEGORIAS+(['OS (Serviços)'] if finance['monthly'] else []),types=[sum((p.tipo==t or (t=='Manutenção' and p.tipo=='Troca de óleo')) for p in valid if p.tipo!='Balcão') for t in ['Revisão','Manutenção','Garantia','Seguro','Outros']],statuses=[sum(p.status==s or (s=='Em andamento' and p.status=='Aberta') for p in osrows) for s in ['Em andamento','Aguardando peças','Aguardando aprovação','Pronta','Atrasada']],categories=finance['categories'] if finance['monthly'] else finance['categories'][:6],passagens=[row(p) for p in valid if p.tipo!='Balcão'][:6],ordens=[row(p) for p in osrows][:6])
         deadline_links={}

@@ -20,7 +20,8 @@ class PedidosTest(unittest.TestCase):
  def test_dashboard_separate_from_finances_and_existing_orders(self):
   rows,s,result=self.load();self.assertEqual(result['importados'],39)
   d=self.c.get('/api/dashboard?inicio=2026-10-01&fim=2026-10-31').get_json()
-  self.assertEqual(d['pedidos']['quantidade'],39);self.assertEqual(d['pedidos']['valor'],'R$ 63.935,72');self.assertEqual(len(d['pedidos']['registros']),6)
+  elegiveis=[r for r in rows if r['cliente'].upper()!='AO CONSUMIDOR']
+  self.assertEqual(d['pedidos']['quantidade'],len(elegiveis));self.assertEqual(d['pedidos']['total_centavos'],sum(r['liquido_centavos'] for r in elegiveis));self.assertEqual(len(d['pedidos']['registros']),6)
   self.assertEqual(d['totals'],[0]*8)
   self.assertEqual(self.c.get('/pedidos').status_code,200);self.assertIn('Pedidos em Aberto',self.c.get('/').text)
   with self.app.app_context():self.assertEqual(db.session.query(Passagem).count(),0)
@@ -33,7 +34,7 @@ class PedidosTest(unittest.TestCase):
    ident=db.session.scalar(db.select(Pedido.id))
   self.assertEqual(self.c.post('/pedidos/'+str(ident)+'/status',data={'status':'Concluído'}).status_code,400)
   self.c.post('/pedidos/'+str(ident)+'/status',data={'csrf':self.token,'status':'Concluído'})
-  self.assertEqual(self.c.get('/api/dashboard?inicio=2026-10-01&fim=2026-10-31').get_json()['pedidos']['quantidade'],38)
+  self.assertEqual(self.c.get('/api/dashboard?inicio=2026-10-01&fim=2026-10-31').get_json()['pedidos']['quantidade'],sum(r['cliente'].upper()!='AO CONSUMIDOR' for r in rows)-1)
   with self.app.app_context():
    import_rows(rows,s,'Parauapebas',Path(self.tmp.name)/'backups');self.assertEqual(db.session.get(Pedido,ident).status,'Concluído')
  def test_filters(self):
@@ -42,7 +43,7 @@ class PedidosTest(unittest.TestCase):
   self.assertEqual(self.c.get('/api/dashboard?inicio=2026-10-15&fim=2026-10-15').get_json()['pedidos']['quantidade'],0)
   with self.app.app_context():
    name=rows[0]['consultor'];c=Consultor(nome=name);db.session.add(c);db.session.commit();ident=c.id
-  expected=sum(r['consultor']==name for r in rows)
+  expected=sum(r['consultor']==name and r['cliente'].upper()!='AO CONSUMIDOR' for r in rows)
   self.assertEqual(self.c.get('/api/dashboard?inicio=2026-10-01&fim=2026-10-31&consultor='+str(ident)).get_json()['pedidos']['quantidade'],expected)
   page=self.c.get('/pedidos?inicio=2026-10-01&fim=2026-10-31&consultor='+str(ident));self.assertEqual(page.status_code,200)
 
