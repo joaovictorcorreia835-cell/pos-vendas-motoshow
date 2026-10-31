@@ -48,6 +48,18 @@ class MonthlyGoalsTest(unittest.TestCase):
             self.assertIn('Meta atingida (%): 84,32',text)
             self.assertIn('Crescimento mínimo mensal desejado (%): 15,0',text)
 
+    def test_next_month_saved_target_overrides_suggestion(self):
+        self.assertEqual(self.c.post('/faturamento/metas',data=self.form()).status_code,302)
+        self.assertEqual(self.c.post('/faturamento/metas',data=self.form(mes=11,os_centavos='191988.05',balcao_centavos='97143.91',mao_centavos='51475.35',total='340607.31')).status_code,302)
+        with self.app.app_context():
+            p=plano(2026,10,'Parauapebas')
+            self.assertEqual(p['proxima_meta'],34060731)
+            self.assertTrue(p['proxima_meta_cadastrada'])
+            self.assertEqual(p['total_meta'],30000000)
+        page=self.c.get('/faturamento?ano=2026&mes=10&unidade=Parauapebas')
+        self.assertIn('R$ 340.607,31',page.text)
+        self.assertIn('Valor definido nas metas do próximo mês',page.text)
+
     def test_invalid_total_and_permissions(self):
         self.assertEqual(self.c.post('/faturamento/metas',data=self.form(total='310000')).status_code,400)
         for value in ['NaN','-1','101','15.001']:

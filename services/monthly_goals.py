@@ -21,9 +21,11 @@ def plano(ano, mes, unidade):
     anterior_total=sum(r.total for r in anterior.linhas) if anterior else None
     taxa=Decimal(config.crescimento_percentual)
     proximo_ano,proximo_mes=(ano,mes+1) if mes<12 else (ano+1,1)
+    proxima_config=db.session.scalar(db.select(MetaFaturamento).where(MetaFaturamento.unidade==unidade,MetaFaturamento.competencia==f'{proximo_ano:04d}-{proximo_mes:02d}'))
+    proxima_meta=sum(getattr(proxima_config,k) for k in LABELS) if proxima_config else int((Decimal(total)*(1+taxa/100)).quantize(Decimal('1'),rounding=ROUND_HALF_UP))
     return dict(unidade=unidade,competencia=config.competencia,categorias=categorias,total_meta=total,total_realizado=realizado,
         total_atingido=round(100*realizado/total,2) if realizado is not None else None,total_falta=max(0,total-realizado) if realizado is not None else None,
         crescimento_minimo=float(taxa),crescimento_realizado=round(100*(realizado-anterior_total)/anterior_total,2) if realizado is not None and anterior_total and anterior_total>0 else None,
-        proxima_competencia=f'{proximo_ano:04d}-{proximo_mes:02d}',proxima_meta=int((Decimal(total)*(1+taxa/100)).quantize(Decimal('1'),rounding=ROUND_HALF_UP)),
+        proxima_competencia=f'{proximo_ano:04d}-{proximo_mes:02d}',proxima_meta=proxima_meta,proxima_meta_cadastrada=bool(proxima_config),
         fonte='Planilha de faturamento mensal salva; não somar ao faturamento dos relatórios fiscais.',
         limite='Crescimento é objetivo gerencial, não previsão nem garantia. Comparação usa meses informados; mês em andamento é parcial.')
