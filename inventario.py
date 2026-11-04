@@ -190,7 +190,20 @@ def mestre():
     policy=db.session.get(PoliticaEstoque,1)
     return render('estoque_mestre.html',rows=rows[(page-1)*per_page:page*per_page],total=len(rows),pagina=page,paginas=max(1,(len(rows)+per_page-1)//per_page),
         indicadores=svc.indicadores(rows),pendentes=pending,policy=policy,conferencia_status=svc.conferencia_status,
+        pdf_url=url_for('inventario.mestre_pdf',**{k:v for k,v in request.args.items() if k not in ('pagina','confirmada','situacao')}),
         pagina_url=lambda p:url_for('inventario.mestre',**dict(request.args,pagina=p)))
+
+
+@bp.get('/mestre/pdf')
+def mestre_pdf():
+    from inventario_pdf import gerar_pdf
+    args=request.args.to_dict()
+    args.update(confirmada='sim',situacao='ativas')
+    rows=consulta(args,somente_fisicas=True)
+    stream=gerar_pdf(rows)
+    response=send_file(stream,as_attachment=True,download_name='motos_confirmadas_'+agora().date().isoformat()+'.pdf',mimetype='application/pdf')
+    response.headers['Cache-Control']='private, no-store'
+    return response
 
 
 @bp.route('/motos/nova',methods=['GET','POST'])
