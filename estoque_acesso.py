@@ -20,6 +20,11 @@ ESCRITA = {
 }
 
 
+def gestor_estoque():
+    from inventario_service import papel
+    return exclusivo() and papel()=='GESTOR'
+
+
 def exclusivo():
     user=getattr(g,'usuario',None) if has_request_context() else None
     return bool(user and user.estoque_exclusivo)
@@ -62,6 +67,10 @@ def autorizar_requisicao():
     if endpoint in ('login','static','healthz'): return
     if endpoint=='dashboard' and request.method=='GET': return redirect(url_for('patio.listagem'))
     allowed=LEITURA if request.method in ('GET','HEAD') else ESCRITA if request.method=='POST' else set()
+    if gestor_estoque():
+        extra_leitura={'inventario.nova_moto','inventario.configuracao'}
+        extra_escrita={'inventario.salvar_nova','inventario.nova_moto','inventario.salvar_configuracao','inventario.encerrar','inventario.analisar'}
+        allowed=allowed | (extra_leitura if request.method in ('GET','HEAD') else extra_escrita if request.method=='POST' else set())
     if endpoint not in allowed:
         if '/api/' in request.path: return jsonify(error='Perfil exclusivo de estoque: acesso proibido.'),403
         abort(403,description='Este perfil permite somente o estoque físico de motos.')
@@ -75,7 +84,7 @@ def autorizar_requisicao():
     if ident is not None:
         if endpoint in ('inventario.ficha','inventario.acao_moto'):
             verificar_moto(db.get_or_404(MotoEstoque,ident))
-        elif endpoint in ('inventario.contagem','inventario.conferir'):
+        elif endpoint in ('inventario.contagem','inventario.conferir','inventario.encerrar','inventario.analisar'):
             verificar_unidade(db.get_or_404(InventarioMoto,ident).unidade_id)
         elif endpoint=='inventario.resolver':
             if not db.session.scalar(divergencias_query(select(DivergenciaMoto)).where(DivergenciaMoto.id==ident)):

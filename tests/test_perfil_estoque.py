@@ -80,6 +80,19 @@ class PerfilEstoqueTest(unittest.TestCase):
         values=list(load_workbook(io.BytesIO(r.data)).active.values)
         self.assertEqual(sum('9C6AAAAAAA0000001' in row for row in values),1);self.assertNotIn('SEGREDO',str(values))
 
+    def test_gestor_exclusivo_amplia_somente_estoque(self):
+        with self.app.app_context():
+            db.session.add(PapelEstoque(usuario_id=self.uid,papel='GESTOR'));db.session.commit()
+        for path in ['/patio/motos/nova','/patio/configuracao-estoque',f'/patio/motos/{self.m}']:
+            self.assertEqual(self.c.get(path).status_code,200,path)
+        self.assertEqual(self.post(f'/patio/motos/{self.m}/acao',acao='editar',modelo='Modelo corrigido',status_comercial=svc.COMERCIAIS[0],observacao='Correcao autorizada').status_code,302)
+        with self.app.app_context():self.assertEqual(db.session.get(MotoEstoque,self.m).modelo,'Modelo corrigido')
+        for path in ['/faturamento','/configuracoes','/backup',f'/patio/motos/{self.n}','/patio/mestre/pdf?unidade=Filial+B']:
+            self.assertEqual(self.c.get(path).status_code,403,path)
+        self.assertEqual(self.post('/patio/configuracao-estoque',tipo='papel',usuario_id=self.bid,papel='GESTOR').status_code,403)
+        self.login_session(self.bid)
+        self.assertEqual(self.c.get('/patio/motos/nova').status_code,403)
+
     def test_pdf_permitido_somente_unidade_autorizada(self):
         from unittest.mock import patch
         from io import BytesIO

@@ -40,7 +40,8 @@ def papel(user=None):
     if user.administrador:
         return 'ADMIN'
     if user.estoque_exclusivo:
-        return 'ESTOQUE_MOTOS'
+        grant=db.session.get(PapelEstoque,user.id)
+        return 'GESTOR' if grant and grant.papel=='GESTOR' else 'ESTOQUE_MOTOS'
     row = db.session.get(PapelEstoque, user.id)
     return row.papel if row else user.perfil if user.perfil in ('GESTOR','ADMIN') else 'OPERADOR'
 
