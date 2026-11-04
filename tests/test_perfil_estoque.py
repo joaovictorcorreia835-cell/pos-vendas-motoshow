@@ -80,6 +80,19 @@ class PerfilEstoqueTest(unittest.TestCase):
         values=list(load_workbook(io.BytesIO(r.data)).active.values)
         self.assertEqual(sum('9C6AAAAAAA0000001' in row for row in values),1);self.assertNotIn('SEGREDO',str(values))
 
+    def test_pdf_permitido_somente_unidade_autorizada(self):
+        from unittest.mock import patch
+        from io import BytesIO
+        with patch('inventario_pdf.gerar_pdf',return_value=BytesIO(b'%PDF-teste')) as gerar:
+            response=self.c.get('/patio/mestre/pdf?unidade=')
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.mimetype,'application/pdf')
+            self.assertEqual([m.id for m in gerar.call_args.args[0]],[self.m])
+            gerar.reset_mock()
+            self.assertEqual(self.c.get('/patio/mestre/pdf?unidade=Filial+B').status_code,403)
+            gerar.assert_not_called()
+        self.assertEqual(self.c.post('/patio/mestre/pdf').status_code,403)
+
     def test_movimenta_confere_audita_usuario_real(self):
         self.assertEqual(self.post(f'/patio/motos/{self.m}/acao',acao='mover',localizacao='PDV',observacao='Pátio para salão').status_code,302)
         self.assertEqual(self.post(f'/patio/inventarios/{self.i}/conferir',chassi='9C6AAAAAAA0000001',localizacao='OFICINA').status_code,302)
