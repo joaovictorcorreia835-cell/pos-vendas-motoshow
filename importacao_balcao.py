@@ -71,8 +71,8 @@ def atualizar_pos_vendas():
         abort(403)
     arquivos = {nome: request.files.get(nome) for nome in ('faturadas', 'abertas', 'pedidos')}
     competencia = request.form.get('competencia', '')
-    if not all(arquivos.values()) or not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', competencia):
-        return jsonify(error='Informe os relatórios de OS, a planilha de pedidos e a competência.'), 400
+    if not all(arquivos[n] for n in ('faturadas', 'abertas')) or not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', competencia):
+        return jsonify(error='Informe os relatórios de OS e a competência.'), 400
     try:
         excl_os = json.loads(request.form.get('excluir_os', '[]'))
         excl_pedidos = json.loads(request.form.get('excluir_pedidos', '[]'))
@@ -98,10 +98,14 @@ def atualizar_pos_vendas():
             numeros = [row['os'] for rows, _ in documentos for row in rows]
             if len(numeros) != len(set(numeros)):
                 raise ValueError('OS duplicada ou presente em situações diferentes.')
-            caminho = Path(pasta) / 'pedidos.htm'
-            arquivos['pedidos'].save(caminho)
-            rows_pedidos, resumo_pedidos = read_html(caminho)
-            resumo_pedidos['arquivo'] = Path(arquivos['pedidos'].filename).name[:255]
+            rows_pedidos, resumo_pedidos = [], {'total_centavos': 0}
+            if arquivos['pedidos']:
+                caminho = Path(pasta) / 'pedidos.htm'
+                arquivos['pedidos'].save(caminho)
+                rows_pedidos, resumo_pedidos = read_html(caminho)
+                resumo_pedidos['arquivo'] = Path(arquivos['pedidos'].filename).name[:255]
+            elif excl_pedidos:
+                raise ValueError('Excluir pedidos exige a planilha de pedidos para conferência.')
             if set(excl_os) & set(numeros) or set(excl_pedidos) & {r['numero'] for r in rows_pedidos}:
                 raise ValueError('Não é permitido excluir registros presentes nos relatórios.')
             historico.create(db.engine, checkfirst=True)
@@ -112,8 +116,10 @@ def atualizar_pos_vendas():
             unidade = db.session.get(Configuracao, 1).unidade
             backup = sqlite_snapshot(db.engine).getvalue()
             plano = synchronize(documentos, unidade, pasta, apply=True, commit=False, criar_backup=False)
-            pedidos = importar_pedidos(rows_pedidos, resumo_pedidos, unidade, pasta,
-                atualizar_existentes=True, commit=False, criar_backup=False)
+            pedidos = dict(importados=0, atualizados=0)
+            if arquivos['pedidos']:
+                pedidos = importar_pedidos(rows_pedidos, resumo_pedidos, unidade, pasta,
+                    atualizar_existentes=True, commit=False, criar_backup=False)
             removidas_os = []
             for numero in set(excl_os):
                 ordem = db.session.scalar(db.select(OrdemServico).where(OrdemServico.numero == numero))
@@ -137,7 +143,8 @@ def atualizar_pos_vendas():
                 os_novas=len(plano['os_novas']), os_finalizadas=len(plano['os_finalizadas']),
                 os_excluidas=sorted(removidas_os), pedidos_arquivo=len(rows_pedidos),
                 pedidos_centavos=resumo_pedidos['total_centavos'], pedidos_novos=pedidos['importados'],
-                pedidos_atualizados=pedidos['atualizados'], pedidos_excluidos=sorted(removidos_pedidos))
+                pedidos_atualizados=pedidos['atualizados'], pedidos_excluidos=sorted(removidos_pedidos),
+                pedidos_preservados=not bool(arquivos['pedidos']))
             digest = hashlib.sha256(('pos-vendas:' + datetime.now().isoformat()).encode()).hexdigest()
             db.session.execute(historico.insert().values(sha256=digest, backup=backup,
                 resultado=dict(tipo='pos_vendas', **resultado), criado_em=datetime.now()))

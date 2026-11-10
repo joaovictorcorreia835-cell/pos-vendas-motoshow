@@ -1,4 +1,5 @@
 import io
+from pathlib import Path
 import unittest
 from copy import deepcopy
 from unittest.mock import patch
@@ -81,3 +82,26 @@ class AtualizacaoBalcaoTest(unittest.TestCase):
         self.assertIn('presentes', response.json['error'])
         with self.app.app_context():
             self.assertEqual(db.session.query(VendaBalcao).count(), 0)
+
+    def test_os_sem_planilha_preserva_pedidos(self):
+        self.admin()
+        row=dict(os='99991', cliente='Cliente Novembro', consultor='Consultor', entrada='2026-11-03',
+            saida='2026-11-03', tipo_original='CLI - SERVICOS', codigo_moto='V0000001', modelo='FZ15',
+            pecas=10000, servicos=2000, total=12000, total_coluna_pdf=12000, pagina=1, mecanico=None)
+        def docs(path):
+            opened=Path(path).name=='abertas.pdf'
+            return [dict(row,os='99992' if opened else '99991')], dict(situacao='Aberta' if opened else 'Faturada',
+                count=1,total=12000,pecas=10000,servicos=2000,sha256=('b' if opened else 'a')*64,arquivo=str(path))
+        with patch('importar_os_pdf.read_pdf', side_effect=docs), patch('pedidos.import_rows') as pedidos:
+            response=self.c.post('/atualizacoes/pos-vendas', data=dict(csrf=self.token,competencia='2026-11',
+                faturadas=(io.BytesIO(b'%PDF'),'faturadas.pdf'),abertas=(io.BytesIO(b'%PDF'),'abertas.pdf')),content_type='multipart/form-data')
+        self.assertEqual(response.status_code,200,response.json)
+        self.assertTrue(response.json['pedidos_preservados'])
+        pedidos.assert_not_called()
+
+    def test_excluir_pedidos_sem_planilha_recusado(self):
+        self.admin()
+        with patch('importar_os_pdf.read_pdf', side_effect=[([{'os':'1'}], {'situacao':'Faturada'}),([{'os':'2'}], {'situacao':'Aberta'})]):
+            response=self.c.post('/atualizacoes/pos-vendas', data=dict(csrf=self.token,competencia='2026-11',excluir_pedidos='["3"]',
+                faturadas=(io.BytesIO(b'%PDF'),'faturadas.pdf'),abertas=(io.BytesIO(b'%PDF'),'abertas.pdf')),content_type='multipart/form-data')
+        self.assertEqual(response.status_code,409)

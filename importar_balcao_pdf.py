@@ -50,6 +50,10 @@ def read_pdf(path):
     if gross-discount!=net:raise ValueError(f'Venda {number}: bruto menos desconto não confere com faturado.')
     if (natureza=='Venda' and net<0) or (natureza=='Devolução' and net>0):raise ValueError('Sinal incompatível com o tipo de movimento.')
     rows.append(dict(numero=number,codigo_interno=internal,cliente=column(150,330),consultor=consultor,natureza=natureza,emissao=datetime.strptime(emitted,'%d/%m/%Y').date().isoformat(),data=datetime.strptime(billed,'%d/%m/%Y').date().isoformat(),nota=column(330,380),bruto=gross,desconto=discount,liquido=net,custo=cost,pagina=page_number))
+ # Relatorios sem movimentos de devolucao omitem a secao e seu subtotal.
+ # Aceitar somente quando os dois totais impressos e todas as linhas conferem.
+ if 'devolucoes' not in expected and rows and all(r['natureza']=='Venda' for r in rows) and expected.get('vendas')==expected.get('liquido') and expected.get('vendas')==sum(r['liquido'] for r in rows):
+  expected['devolucoes']=0
  if count is None or not expected.keys()>={'vendas','devolucoes','liquido'}:raise ValueError('Totais finais ausentes; nenhuma importação permitida.')
  calculated=dict(vendas=sum(r['liquido'] for r in rows if r['natureza']=='Venda'),devolucoes=sum(r['liquido'] for r in rows if r['natureza']=='Devolução'),liquido=sum(r['liquido'] for r in rows))
  sales_count=sum(r['natureza']=='Venda' for r in rows)
