@@ -65,6 +65,9 @@ def autorizar_requisicao():
     if not exclusivo(): return
     endpoint=request.endpoint
     if endpoint in ('login','static','healthz'): return
+    from inventario_service import papel
+    if papel()=='CONSULTA' and request.method not in ('GET','HEAD') and endpoint not in ('minha_senha','logout'):
+        abort(403,description='Este acesso permite somente consulta do estoque de motos.')
     if endpoint=='dashboard' and request.method=='GET': return redirect(url_for('patio.listagem'))
     allowed=LEITURA if request.method in ('GET','HEAD') else ESCRITA if request.method=='POST' else set()
     if gestor_estoque():

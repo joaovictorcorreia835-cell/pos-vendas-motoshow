@@ -182,3 +182,20 @@ class PerfilEstoqueTest(unittest.TestCase):
         self.assertEqual(self.post(f'/patio/divergencias/{oid}/resolver',acao='JUSTIFICAR',justificativa='Tentativa').status_code,403)
         self.assertEqual(self.post(f'/patio/divergencias/{did}/resolver',acao='JUSTIFICAR',justificativa='Localização conferida fisicamente no PDV').status_code,302)
         with self.app.app_context():self.assertEqual(db.session.get(DivergenciaMoto,did).resolvido_por,'estoque.a')
+
+    def test_consulta_exclusiva_bloqueia_todas_mutacoes(self):
+        with self.app.app_context():
+            db.session.add(PapelEstoque(usuario_id=self.uid,papel='CONSULTA'));db.session.commit()
+        for path in ['/patio','/patio/mestre',f'/patio/motos/{self.m}','/patio/api/localizar?q=9C6']:
+            self.assertEqual(self.c.get(path).status_code,200,path)
+        page=self.c.get(f'/patio/motos/{self.m}').text
+        self.assertNotIn('value="conferir"',page)
+        for action in ['conferir','mover','saida','transferir','editar','retorno','oficina']:
+            self.assertEqual(self.post(f'/patio/motos/{self.m}/acao',acao=action,localizacao='GALPAO').status_code,403,action)
+        for path in ['/patio/motos/nova','/patio/inventarios/novo','/patio/conferencia-massa','/patio/configuracao-estoque','/configuracoes/usuarios']:
+            self.assertEqual(self.post(path).status_code,403,path)
+        self.assertEqual(self.c.get('/faturamento').status_code,403)
+        self.assertEqual(self.c.get(f'/patio/motos/{self.n}').status_code,403)
+        self.assertEqual(self.c.get('/minha-senha').status_code,200)
+        with self.app.app_context():
+            self.assertEqual(db.session.get(MotoEstoque,self.m).localizacao.codigo,'PATIO')

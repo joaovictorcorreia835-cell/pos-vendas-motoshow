@@ -466,7 +466,7 @@ def salvar_configuracao():
     elif kind=='papel':
         svc.permitir('ADMIN'); uid=int(request.form['usuario_id']); role=request.form.get('papel')
         if role not in ('ADMIN','GESTOR','OPERADOR','CONSULTA') or not db.session.get(Usuario,uid) or uid==1:raise ValueError('Usuário ou papel inválido. Para acesso exclusivo use a administração de usuários.')
-        if db.session.get(Usuario,uid).estoque_exclusivo and role not in ('GESTOR','OPERADOR'):raise ValueError('Use GESTOR ou OPERADOR para acesso exclusivo ao estoque.')
+        if db.session.get(Usuario,uid).estoque_exclusivo and role not in ('GESTOR','OPERADOR','CONSULTA'):raise ValueError('Use GESTOR, OPERADOR ou CONSULTA para acesso exclusivo ao estoque.')
         p=db.session.get(PapelEstoque,uid); before=dict(usuario_id=uid,papel=p.papel if p else 'OPERADOR')
         if p is None:p=PapelEstoque(usuario_id=uid);db.session.add(p)
         p.papel=role;svc.auditar(None,'PERMISSÃO DE ESTOQUE',before,novo=dict(usuario_id=uid,papel=role))
