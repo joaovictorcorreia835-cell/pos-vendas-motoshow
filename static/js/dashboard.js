@@ -39,7 +39,7 @@
   d.totals.forEach((v,i)=>{
    put('kpi-'+i,[1,2,3,4].includes(i)?currency(v):v);
    const previous=d.previous[i],rate=previous?(v-previous)*100/previous:null;
-   put('comparison-'+i,previous===null?'Sem base anterior':rate===null?(v?'Novo no período':'— 0%'):`${rate>0?'↑':rate<0?'↓':'—'} ${rate.toFixed(0)}%`);
+   put('comparison-'+i,previous===null?'Sem base anterior':rate===null?(v?'Novo no período':'— 0,0%'):`${rate>0?'↑':rate<0?'↓':'—'} ${rate.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})}%`);
   });
   const ticket=d.ticket_medio,billed=d.ticket_pedidos_faturados,pd=d.pedidos,pf=d.faturamento_pendente;
   for(const [id,value] of Object.entries({
@@ -51,7 +51,7 @@
   put('ticket-count',ticket.quantidade+' OS');put('ticket-excluded',ticket.trocas_oleo_excluidas+' trocas de óleo excluídas');
   put('ticket-orders-base',pd.valor+' ÷ '+pd.quantidade+' pedidos em aberto');
   put('ticket-billed-orders-base',currency(billed.total_centavos)+' ÷ '+billed.quantidade+' vendas faturadas');
-  put('financial-note',d.financial_note||'');el('financial-note').hidden=!d.financial_note;
+  document.querySelectorAll('.kpi .comparison + small').forEach(node=>{node.textContent=d.comparison_label||'vs. período anterior';}); put('financial-note',d.financial_note||'');el('financial-note').hidden=!d.financial_note;
   put('pending-summary',pd.quantidade+' pedidos • '+pd.valor);
   table('recent-passages','passages-empty',d.passagens,['id','hora','cliente','moto','tipo','consultor','status']);
   table('recent-orders','orders-empty',d.ordens,['os','entrada','cliente','moto','consultor','tipo','status','prazo','valor']);
