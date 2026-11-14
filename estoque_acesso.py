@@ -4,7 +4,7 @@ from sqlalchemy import select
 from models import db
 from inventario_models import UnidadeEstoque, MotoEstoque, InventarioMoto, DivergenciaMoto
 
-PERFIS = ('ADMIN', 'GESTOR', 'OPERADOR', 'ESTOQUE_MOTOS')
+PERFIS = ('ADMIN', 'GESTOR', 'OPERADOR', 'ESTOQUE_MOTOS', 'CONSULTA_OFICINA')
 LEITURA = {
     'inventario.mestre_pdf',
     'inventario.oficina', 'patio.listagem', 'inventario.mestre', 'inventario.ficha', 'inventario.localizar',

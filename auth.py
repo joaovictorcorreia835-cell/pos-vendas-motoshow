@@ -35,6 +35,13 @@ def configure_auth(app):
             if request.method!='GET':
                 abort(400,description='Faça login e recarregue o formulário.')
             return redirect(url_for('login',next=request.full_path))
+        if g.usuario.consulta_oficina:
+            read_paths={'/','/api/dashboard','/ordens','/passagens','/garantia','/seguro','/faturamento','/faturamento/lancamentos','/pedidos','/relatorios','/patio/oficina','/minha-senha','/logout'}
+            own=request.path in ('/minha-senha','/logout')
+            if request.method not in ('GET','HEAD') and not own:
+                abort(403,description='Acesso somente para consulta e download de relatorios.')
+            if request.path not in read_paths and not re.fullmatch(r'/patio/motos/\d+',request.path):
+                abort(403,description='Acesso restrito a consulta da oficina e faturamento.')
         from estoque_acesso import autorizar_requisicao
         denied=autorizar_requisicao()
         if denied is not None:return denied
@@ -71,7 +78,7 @@ def configure_auth(app):
             try:
                 user=Usuario(login=name,nome=display,perfil=role,unidade_id=unit.id if unit else None,ativo=request.form.get('ativo','sim')=='sim',senha_hash=generate_password_hash(password))
                 db.session.add(user);db.session.flush()
-                db.session.add(PapelEstoque(usuario_id=user.id,papel='OPERADOR' if role=='ESTOQUE_MOTOS' else role))
+                db.session.add(PapelEstoque(usuario_id=user.id,papel='CONSULTA' if role=='CONSULTA_OFICINA' else 'OPERADOR' if role=='ESTOQUE_MOTOS' else role))
                 from inventario_service import auditar
                 auditar(None,'CRIAÇÃO DE USUÁRIO',novo=dict(usuario_id=user.id,login=name,perfil=role,unidade_id=user.unidade_id,ativo=user.ativo))
                 db.session.commit()
@@ -97,7 +104,7 @@ def configure_auth(app):
         user.nome=display;user.perfil=role;user.unidade_id=unit.id if unit else None;user.ativo=active;user.versao+=1
         p=db.session.get(PapelEstoque,ident)
         if not p:p=PapelEstoque(usuario_id=ident);db.session.add(p)
-        p.papel='OPERADOR' if role=='ESTOQUE_MOTOS' else role
+        p.papel='CONSULTA' if role=='CONSULTA_OFICINA' else 'OPERADOR' if role=='ESTOQUE_MOTOS' else role
         auditar(None,'ALTERAÇÃO DE ACESSO',before,novo=dict(usuario_id=ident,perfil=role,unidade_id=user.unidade_id,ativo=active,nome=display))
         db.session.commit()
         flash('Acesso atualizado. As sessões anteriores deste usuário foram encerradas.','success')

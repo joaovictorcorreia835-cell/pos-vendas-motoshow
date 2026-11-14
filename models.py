@@ -26,6 +26,10 @@ class Usuario(db.Model):
     ativo = db.Column(db.Boolean, nullable=False, default=True)
 
     @property
+    def consulta_oficina(self):
+        return self.id != 1 and self.perfil == 'CONSULTA_OFICINA'
+
+    @property
     def estoque_exclusivo(self):
         return self.id != 1 and self.perfil == 'ESTOQUE_MOTOS'
 
